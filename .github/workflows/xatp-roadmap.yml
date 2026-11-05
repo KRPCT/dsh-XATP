@@ -1,0 +1,40 @@
+name: XATP roadmap
+on:
+  push:
+    branches: [feat/evidence-video-workbench]
+    paths:
+      - '.github/xatp/roadmap.json'
+      - 'tooling/xatp/roadmap.py'
+      - '.github/workflows/xatp-roadmap.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+concurrency:
+  group: xatp-roadmap
+  cancel-in-progress: false
+jobs:
+  reconcile:
+    if: github.repository == 'KRPCT/dsh-XATP'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read exact-commit roadmap and reconciler
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import base64, json, os, pathlib, urllib.request
+          root = pathlib.Path(os.environ['RUNNER_TEMP']) / 'xatp-roadmap'
+          root.mkdir(exist_ok=True)
+          for remote, local in [('.github/xatp/roadmap.json', 'roadmap.json'), ('tooling/xatp/roadmap.py', 'roadmap.py')]:
+              url = 'https://api.github.com/repos/' + os.environ['GITHUB_REPOSITORY'] + '/contents/' + remote + '?ref=' + os.environ['GITHUB_SHA']
+              request = urllib.request.Request(url, headers={'Authorization': 'Bearer ' + os.environ['GITHUB_TOKEN'], 'Accept': 'application/vnd.github+json', 'User-Agent': 'xatp-roadmap-bootstrap'})
+              with urllib.request.urlopen(request, timeout=20) as response:
+                  data = json.load(response)
+              (root / local).write_bytes(base64.b64decode(data['content']))
+          PY
+      - name: Reconcile native milestones and issues
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: timeout 240s python3 "$RUNNER_TEMP/xatp-roadmap/roadmap.py" "$RUNNER_TEMP/xatp-roadmap/roadmap.json" --apply
