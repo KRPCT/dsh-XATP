@@ -1,0 +1,22 @@
+# Bilingual-pair consistency record for 2026-11-06-xatp-evidence-workbench.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/proposed/architecture/2026-11-06-xatp-evidence-workbench.md
+/agent-note-evidence-ownership-in-the-xatp-workbench:
+  en: 9d301f9e96dda906
+  zh: 81c068b908c22429
+/agent-note-evidence-ownership-in-the-xatp-workbench/problem:
+  en: f1e0efb6b55ec982
+  zh: 9e1eb6c150609f17
+/agent-note-evidence-ownership-in-the-xatp-workbench/proposal:
+  en: 41bd69fa3b09495c
+  zh: 5aa92fc7f90bc235
+/agent-note-evidence-ownership-in-the-xatp-workbench/alternatives-considered:
+  en: 7c862070fa9f9347
+  zh: 63e1a2d65a8ed20b
+/agent-note-evidence-ownership-in-the-xatp-workbench/acceptance-criteria:
+  en: 3c0b814eb013fce3
+  zh: 3f45bdbad91a4cde
+/agent-note-evidence-ownership-in-the-xatp-workbench/risks:
+  en: b2a373c3b4d0f6c1
+  zh: 89bb409e3b55c059

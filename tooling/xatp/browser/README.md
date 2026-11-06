@@ -1,0 +1,32 @@
+# XATP browser adapter
+
+The host imports `createBrowserAdapter({endpoint})` from `index.mjs` and points it at a dedicated local Chromium debugging port. Each request selects a provider and tab. The adapter opens a bounded CDP connection, reads the main frame's accessibility tree and inspects the corresponding DOM nodes in an isolated world. It does not launch Chromium. Requires Node 24.
+
+```js
+const adapter = createBrowserAdapter({endpoint: 'http://127.0.0.1:9222'});
+const tabs = await adapter.listTabs();
+const tab = tabs.find(tab => tab.providerId === 'updream');
+if (tab) {
+  const {documentId, tools, unsupported} = await adapter.discover(tab);
+  const result = await adapter.invoke({...tab, documentId, toolId:'page', operation:'collect_assets'});
+}
+```
+
+| Operation | Scope | Result |
+| --- | --- | --- |
+| inspect | Current visible semantic control | Current role, accessible name, form identity and disabled state |
+| read_link | Enabled link with an enrolled origin | Resolved URL. No request is sent to the destination |
+| collect_assets | Updream main document | Rendered image, video, audio and recognizable linked media. `items` contain allowed clean URLs. `media` reports visible video/audio host, playback readiness, duration in seconds and intrinsic dimensions, including when a signed address is withheld |
+| collect_citations | LeapSpace main document | Visible DOI, ScienceDirect PII, Elsevier PII and PubMed record links. These are possible sources visible on the page. Attribution to a particular answer requires verification in its citation view |
+
+A new discovery observes DOM changes. Invocation rechecks the target, origin, frame, loader, URL and control identity. A stale document or replaced control requires rediscovery. The adapter exposes up to 200 controls per snapshot, excludes password and file inputs, reports unsupported canvas/frames and truncation, and returns no input values. Controls with custom drawing, inaccessible markup, unrendered virtualization and closed embedded frames require separate coverage. A visible timeline canvas does not expose its internal tools through this adapter.
+
+Provider replacement uses trusted host configuration. Each entry supplies an `id`, exact `origins`, enabled `capabilities`, and optional `resourceOrigins`. The defaults enroll Updream and the official ScienceDirect LeapSpace path separately. LeapSpace requires the exact `/leapspace` path or its descendants, which excludes login pages and ordinary articles on the same host. [Elsevier access instructions](https://www.elsevier.support/leapspace/answer/accessing-leapspace). Qualifying media and original-source links must use an enrolled origin, without credentials, a fragment, or URL parameters. HTTPS origins and explicitly configured HTTP loopback fixtures are supported. Discovery accepts no scripts, URL overrides, selectors, browser launches or paid operations. The host owns the debugging port, browser profile and provider configuration.
+
+To verify the adapter on an isolated local Chromium instance, run `node --test tooling/xatp/browser/browser.test.mjs`. Set `CHROMIUM_BIN` to an alternative Chromium executable if needed. The test launches a disposable browser profile with a local fixture and terminates it on exit. It exercises dynamic replacement, SPA navigation, reloads, blocked operations, signed links and media metadata. No hosted generation or research query is part of this test.
+
+## Recorded browser observations
+
+[observations.json](./observations.json) records a signed-out inspection of the published Updream canvas and a separate OpenCLI fixture experiment. To repeat the media observation, open the [public example](https://www.updream.cn/skills/guide-first-video-v7/examples/default) in a dedicated Chromium profile, discover its controls and inspect `collect_assets`. Open the existing “查看视频初版v2” preview in the browser, then invoke the same read again after the media loads. The observed video reached readiness 4 at 864 × 496 and 8.041667 seconds. The adapter returns playback metadata while keeping signed asset URLs private.
+
+The OpenCLI comparison used the [v2.0.2 release commit](https://github.com/jackwener/opencli/tree/deca0fee85016be2e58836eeca974825e09c9076), its npm binary with lifecycle scripts disabled, and a temporary read-only fixture command registered with `@jackwener/opencli/registry`. With `OPENCLI_CDP_ENDPOINT` set, the command read `page.snapshot({source:'dom'})`, `page.snapshot({source:'ax'})` and control labels from the same local Chromium target. The DOM snapshot numbered the textbox and link and printed the disabled button. OpenCLI's AX snapshot returned only the root for this fixture. Generic `opencli browser state` uses the separate Browser Bridge extension in this release. Hosted generation, account access and authenticated research are outside these observations.

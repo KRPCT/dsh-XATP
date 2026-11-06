@@ -1,0 +1,48 @@
+{
+  "observed_on": "2026-11-06",
+  "public_page": "https://www.updream.cn/skills/guide-first-video-v7/examples/default",
+  "updream_node_cdp": {
+    "client": "tooling/xatp/browser/index.mjs",
+    "browser": "Chromium 153.0.8010.0 headless shell",
+    "profile": "disposable, signed out",
+    "dom_buttons_before_preview": 36,
+    "sample_discovered_button_names": ["查看剧本", "查看美术资产清单", "查看视频关键帧1", "查看视频初版v2", "购买积分"],
+    "collect_assets_before_preview": {"items": 0, "media": 0},
+    "preview_step": "Experiment driver opened the pre-existing preview after checking the exact URL, read-only text, and unique enabled preview button. Agent operations expose no click.",
+    "collect_assets_after_preview": {
+      "media": [{"kind":"video","hostname":"boss-shjd.biliapi.net","duration":8.041667,"readyState":4,"width":864,"height":496}]
+    },
+    "generated": false,
+    "asset_file_retrieved": false
+  },
+  "updream_cloud_browser": {
+    "observer": "independent cloud browser inspection in the same session",
+    "matched_button": "查看视频初版v2",
+    "videos_before": 0,
+    "videos_after": 1,
+    "media": {"hostname":"boss-shjd.biliapi.net","duration":8.041667,"readyState":4},
+    "page_registered_webmcp_tools": 0
+  },
+  "opencli_local_fixture": {
+    "package":"@jackwener/opencli@2.0.2",
+    "npm_integrity":"sha512-+O+S+FQikiVunP/alMG//ww9D1lpgA24+C6ifyyzI4rZVT6GEJVqaiGZWbyI2i/Hcocs4l1K6gnNt+3Yaf2wtw==",
+    "release_tag": "v2.0.2",
+    "release_commit":"deca0fee85016be2e58836eeca974825e09c9076",
+    "source":"https://github.com/jackwener/opencli/tree/deca0fee85016be2e58836eeca974825e09c9076",
+    "browser":"Chromium 153.0.8010.0 headless shell",
+    "scope":"Local HTML fixture. Both implementations inspected the same live target.",
+    "cli_path":"OPENCLI_CDP_ENDPOINT set, official CLI with a temporary read-only command registered by a Node --import preload",
+    "cli_exit_code":0,
+    "opencli_dom_snapshot_interactive":2,
+    "opencli_ax_snapshot_interactive":0,
+    "opencli_evaluated_controls":[{"tag":"input","name":"Keywords","disabled":false},{"tag":"button","name":"Generate (paid)","disabled":true},{"tag":"a","name":"Public clip","disabled":false}],
+    "xatp_accessibility_roles":["textbox","button","link"],
+    "generic_browser_state":"Without the Browser Bridge extension the separate generic browser state command produced no result within the 11-second experiment budget."
+  },
+  "leapspace": {
+    "official_access":"https://www.elsevier.support/leapspace/answer/accessing-leapspace",
+    "registered_route":"https://www.sciencedirect.com/leapspace",
+    "retrieval_observed":false,
+    "source_link_extraction_verified_on":"local fixture with DOI link"
+  }
+}
