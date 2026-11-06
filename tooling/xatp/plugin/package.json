@@ -1,0 +1,29 @@
+{
+  "name": "@xatp/workbench",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/host.mjs",
+  "exports": {
+    ".": "./dist/host.mjs",
+    "./package.json": "./package.json",
+    "./client": "./dist/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "files": [
+    "dist",
+    "cordis.patch.yml"
+  ],
+  "engines": {
+    "node": ">=24.9.0",
+    "dsh": "0.2.2-rc.1"
+  }
+}

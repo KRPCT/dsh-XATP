@@ -31,7 +31,8 @@ export function mountBrowser(root, api, t, { el, button, search, heading }) {
     chooser.append(el('option', '', t('selectTab')));
     chooser.options[0].value = '';
     for (const [i, item] of tabs.entries()) {
-      const option = el('option', '', item.providerId + ' · ' + item.url);
+      const surface = item.surface === 'dsh_web_iframe' ? t('embeddedTab') + ' · ' : '';
+      const option = el('option', '', surface + item.providerId + ' · ' + item.url);
       option.value = String(i);
       chooser.append(option);
       option.selected = tab === item;
@@ -47,7 +48,7 @@ export function mountBrowser(root, api, t, { el, button, search, heading }) {
     });
     controls.append(chooser);
     const actions = el('div', 'x-actions');
-    const scan = button(t('scan'), discover, 'x-btn x-primary');
+    const scan = button(t('scan'), () => discover(), 'x-btn x-primary');
     scan.disabled = !tab || !api.discover;
     const reload = button(t('reload'), listTabs);
     reload.disabled = !api.listTabs;
@@ -148,6 +149,7 @@ export function mountBrowser(root, api, t, { el, button, search, heading }) {
       }
     }
     renderList();
+    if (catalog.nextCursor) controls.append(button(t('moreTools'), () => discover(catalog)));
     if (catalog.unsupported && Object.keys(catalog.unsupported).length) {
       const limits = el('details', 'x-limits');
       const facts = el('dl', 'x-fields');
@@ -222,19 +224,28 @@ export function mountBrowser(root, api, t, { el, button, search, heading }) {
       notice(inspector, t('listFailed'), error);
     }
   }
-  async function discover() {
+  async function discover(previous) {
     const request = ++epoch;
     catalog = selected = undefined;
     controlsForTab();
     inspector.replaceChildren();
     notice(inspector, t('scanning'));
     try {
-      const result = await api.discover({ tabId: tab.tabId, providerId: tab.providerId });
+      const result = await api.discover({ tabId: tab.tabId, providerId: tab.providerId, ...(previous ? {cursor:previous.nextCursor} : {}) });
       if (!current(request)) return;
       if (result.tabId !== tab.tabId || result.providerId !== tab.providerId || !result.documentId || !Array.isArray(result.tools)) {
         throw new Error(t('unavailable'));
       }
-      catalog = result;
+      if (previous && result.documentId !== previous.documentId) throw new Error(t('unavailable'));
+      if (previous) {
+        const unsupported = {...result.unsupported};
+        for (const key of ['omittedControls','unmappedControls']) {
+          unsupported[key] = (previous.unsupported?.[key] || 0) + (result.unsupported?.[key] || 0);
+        }
+        catalog = {...result, tools:[...previous.tools,...result.tools], unsupported};
+      } else {
+        catalog = result;
+      }
       showCatalog();
     } catch (error) {
       if (!current(request)) return;

@@ -32,10 +32,10 @@ async function dshProbe(raw) {
   } catch { return 'host_unreachable'; }
 }
 
-async function browserProbe(endpoint) {
+async function browserProbe(endpoint, dshWebOrigin) {
   if (!endpoint) return {cdp:'endpoint_missing',updream:'not_checked',leapspace:'not_checked'};
   try {
-    const adapter = createBrowserAdapter({endpoint});
+    const adapter = createBrowserAdapter({endpoint, dshWebOrigin});
     const tabs = await adapter.listTabs();
     const states = await Promise.all(['updream','leapspace'].map(async id => {
       const tab = tabs.find(t => t.providerId === id);
@@ -50,7 +50,7 @@ async function browserProbe(endpoint) {
 }
 
 async function preflight(env) {
-  const [dsh,browser] = await Promise.all([dshProbe(env.XATP_DSH_ORIGIN),browserProbe(env.XATP_CDP_ENDPOINT)]);
+  const [dsh,browser] = await Promise.all([dshProbe(env.XATP_DSH_ORIGIN),browserProbe(env.XATP_CDP_ENDPOINT,env.XATP_DSH_ORIGIN)]);
   const key = env.DEEPSEEK_API_KEY?.trim() ? 'present_unverified' : 'absent_from_environment';
   return {
     ready:dsh === 'host_challenge_observed' && key === 'present_unverified'

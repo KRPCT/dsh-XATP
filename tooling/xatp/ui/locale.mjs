@@ -1,5 +1,7 @@
 /** Localized labels for the embeddable XATP views. Keys also identify record and operation kinds. */
 const en = {
+  embeddedTab: 'DSH Browser',
+  moreTools: 'Load more tools',
   publicObservation: 'Public canvas observation', observedOn: 'Observed on', dimensions: 'Dimensions', observedControls: 'Observed controls', openExample: 'Visit the public example',
   oldVersionUsers: 'Still using an earlier prompt', reviewStatus: 'Review status', 'needs-review': 'Needs review', editPrompt: 'Edit prompt', saveRevision: 'Save new version', discardEdit: 'Discard edits', saving: 'Saving…',
   originalRetained: 'A new version keeps the selected evidence references.', localRevision: 'Changes last until you close or reload this preview.',
@@ -33,6 +35,8 @@ const en = {
   file: 'File', hash: 'File digest', code: 'Code', reason: 'Reason', state: 'State', noAllowed: 'No supported read operation',
 };
 const zh = {
+  embeddedTab: 'DSH 内置浏览器',
+  moreTools: '加载更多工具',
   publicObservation: '公开画布实测记录', observedOn: '观测日期', dimensions: '尺寸', observedControls: '观察到的控件', openExample: '访问公开示例',
   oldVersionUsers: '仍引用旧版提示词', reviewStatus: '复核状态', 'needs-review': '待复核', editPrompt: '编辑提示词', saveRevision: '保存为新版本', discardEdit: '放弃编辑', saving: '正在保存…',
   originalRetained: '新版本沿用当前引用的证据', localRevision: '修改仅在本次打开期间有效，刷新或关闭预览后会清除',

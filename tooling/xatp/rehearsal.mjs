@@ -1,24 +1,11 @@
 /** Reproducible no-account example. Local echo receipts cannot enter a real project. */
-import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { initWorkspace, putBlob, recordRevision, exportShot } from './workspace.mjs';
+import { recordRocDraft } from './roc-draft.mjs';
+import { sample } from './roc-renderer.mjs';
 import { submitGeneration, recordCollectedRun } from './generation.mjs';
 
-export const sample = [[.92,1],[.87,1],[.79,0],[.75,1],[.62,0],[.57,1],[.43,0],[.21,0]];
-export function renderDraft(rows = sample, step = rows.length) {
-  const pos = rows.filter(r => r[1] === 1).length, neg = rows.length - pos;
-  const thresholds = [...new Set(rows.map(r => r[0]))].sort((a,b) => b-a);
-  const points = [[0,0], ...thresholds.map(t => [
-    rows.filter(([s,y]) => s >= t && y === 0).length / neg,
-    rows.filter(([s,y]) => s >= t && y === 1).length / pos,
-  ])];
-  const x = v => 74 + 375*v, y = v => 250 - 193*v;
-  const visible = points.slice(0, step + 1);
-  const line = visible.map(([f,t],i) => (i?'L':'M')+x(f)+' '+y(t)).join(' ');
-  const grid = [0,.25,.5,.75,1].map(v => '<path d="M74 '+y(v)+'H449 M'+x(v)+' 57V250"/>').join('');
-  const dots = visible.map(([f,t]) => '<circle cx="'+x(f)+'" cy="'+y(t)+'" r="3.7"/>').join('');
-  return '<svg xmlns="http://www.w3.org/2000/svg" width="720" height="320" viewBox="0 0 720 320"><rect width="720" height="320" fill="#13262c"/><g font-family="sans-serif" fill="#edf4ef"><text x="44" y="33" font-size="15">阈值如何改变分类结果</text><text x="74" y="274" font-size="11">0</text><text x="440" y="274" font-size="11">1</text><text x="42" y="62" font-size="11">1</text><text x="181" y="295" font-size="13">假阳性率 FPR →</text><text x="75" y="51" font-size="11">真阳性率 TPR ↑</text><text x="490" y="115" font-size="32">ROC</text><text x="490" y="148" font-size="16">八个模拟样本</text><text x="490" y="177" font-size="13">4 个阳性 · 4 个阴性</text><text x="490" y="240" font-size="12" fill="#9fb8b5">教学示意 · 无临床数据</text></g><g fill="none" stroke="#365057">'+grid+'</g><path d="M74 250L449 57" stroke="#809695" stroke-dasharray="4 7"/><path d="'+line+'" fill="none" stroke="#87dfc6" stroke-width="4"/><g fill="#b7f4df">'+dots+'</g></svg>';
-}
+export { renderDraft, sample } from './roc-renderer.mjs';
 
 export const localRenderer = {
   id:'local-draft-echo', mode:'demo', referenceImage:true, cost:'free',
@@ -34,7 +21,7 @@ export async function createRehearsal(directory, renderer = localRenderer) {
   const claim = add('c.threshold','claim','阈值决定 ROC 平面上的工作点',[source],{statement:'改变同一组分数的分类阈值，每个阈值给出一对假阳性率与真阳性率。',scope:'用于解释二元分类。示例不报告任何疾病预测模型的性能。'});
   const concept = add('k.frame','concept','固定坐标，逐个放宽阈值',[],{rationale:'让观众比较同一组样本的分类变化。'});
   const prompt = add('p.plot','prompt','锁定坐标轴与阈值顺序',[claim,concept],{text:'保留草稿中的两根坐标轴、阶梯路径和点位。镜头停留六秒。画面注明八个样本为模拟值。',creativeRationale:'用同一坐标系展示变化，让观众能沿每个折点核查。'});
-  const draft = add('d.plot','draft','阈值扫描 · 可复算草稿',[prompt],{mime:'image/svg+xml',blob:putBlob(directory,renderDraft()),dataBasis:'8 个自造分数，四阳性四阴性。仅作示意。',samples:sample,renderer:'tooling/xatp/rehearsal.mjs#renderDraft',rendererHash:putBlob(directory,readFileSync(new URL(import.meta.url)))});
+  const draft = recordRocDraft(directory,{id:'d.plot',expectedVersion:0,promptId:prompt.id,promptVersion:prompt.version,dataClass:'simulated',rows:sample});
   const job = await submitGeneration(directory,{id:'shot01',prompt,draft,parameters:{seconds:6}},renderer);
   const run = recordCollectedRun(directory,job.id);
   const film = job.outputMime === 'video/webm';

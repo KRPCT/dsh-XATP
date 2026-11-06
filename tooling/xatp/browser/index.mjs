@@ -58,8 +58,39 @@ function pageChanged() {
   return new AdapterError('stale_document', 'The selected document changed. Discover its tools again.');
 }
 
-async function frameState(send, policy, tabId) {
-  const {frameTree} = await send('Page.getFrameTree');
+const dshSandbox = 'allow-scripts allow-forms allow-same-origin allow-popups allow-popups-to-escape-sandbox';
+
+function isDshPage(raw, hostOrigin) {
+  if (!hostOrigin) return false;
+  try {
+    const url = new URL(raw);
+    return url.origin === hostOrigin && url.pathname === '/' && !url.search && !url.username && !url.password;
+  } catch { return false; }
+}
+
+async function embeddedId(send, parent, child, policy, targetId) {
+  if (!pageUrl(child.url,policy) || !child.loaderId || child.parentId !== parent.id) return null;
+  const {backendNodeId} = await send('DOM.getFrameOwner',{frameId:child.id});
+  const {node} = await send('DOM.describeNode',{backendNodeId,depth:0});
+  if (node.localName !== 'iframe') return null;
+  const attrs = new Map();
+  for (let i=0; i<node.attributes.length; i+=2) attrs.set(node.attributes[i],node.attributes[i+1]);
+  // IframePresentation sets this marker, policy and src on the exact DOM frame owner.
+  if (attrs.get('data-sidebar-browser-frame') !== 'iframe' || attrs.get('referrerpolicy') !== 'no-referrer'
+    || attrs.get('sandbox') !== dshSandbox || !pageUrl(attrs.get('src'),policy)) return null;
+  const epoch = hash([parent.id,parent.loaderId,backendNodeId,attrs.get('src'),child.loaderId,child.url,child.urlFragment]);
+  return targetId + '~' + child.id + '~' + epoch;
+}
+
+async function frameState(send, policy, tabId, hostOrigin) {
+  const {frameTree:root} = await send('Page.getFrameTree');
+  const [targetId,childId] = tabId.split('~');
+  let frameTree = root;
+  if (childId) {
+    if (!isDshPage(root.frame.url,hostOrigin)) throw pageChanged();
+    frameTree = root.childFrames?.find(child => child.frame.id === childId);
+    if (!frameTree || await embeddedId(send,root.frame,frameTree.frame,policy,targetId) !== tabId) throw pageChanged();
+  }
   const frame = frameTree.frame;
   const url = pageUrl(frame.url, policy);
   if (!url) throw new AdapterError('origin_mismatch', 'The selected page is outside the provider origins.');
@@ -83,15 +114,36 @@ async function currentTool(send, context, node, policy, tabId, documentId) {
   const ops = [];
   if (policy.capabilities.has('inspect')) ops.push('inspect');
   if (role === 'link' && url && !disabled && policy.capabilities.has('read_link')) ops.push('read_link');
-  const toolId = hash([tabId, documentId, node.backendDOMNodeId, role, name, disabled, form, url]);
+  const toolId = node.backendDOMNodeId + '.' + hash([tabId, documentId, node.backendDOMNodeId, role, name, disabled, form, url]);
   return {tool:{toolId, role, name, form, disabled, operations:ops}, url};
 }
 
-async function enumerate(send, frame, context, policy, tabId) {
+async function enumerate(send, frame, context, policy, tabId, cursor, requestedTool) {
   const {nodes} = await send('Accessibility.getFullAXTree', {frameId:frame.id});
   const candidates = nodes.filter(n => !n.ignored && n.backendDOMNodeId && n.role.value !== 'RootWebArea'
     && (interactive.has(n.role.value.toLowerCase()) || n.properties?.some(p => p.name === 'focusable' && p.value.value)));
-  const limited = candidates.slice(0, 200);
+  const pageSize = 200;
+  // AX identity, order, labels, roles and disabled changes invalidate any remaining pages.
+  const revision = hash([frame.documentId,policy.id,candidates.map(n => [
+    n.backendDOMNodeId,n.role.value,n.name?.value,n.properties?.find(p => p.name === 'disabled')?.value.value,
+  ])]);
+  const at = offset => offset + '.' + hash([revision,offset]);
+  let offset = 0;
+  if (cursor !== undefined) {
+    const match = typeof cursor === 'string' && /^(\d+)\.[0-9a-f]{32}$/.exec(cursor);
+    offset = match ? Number(match[1]) : NaN;
+    if (!Number.isSafeInteger(offset) || offset < pageSize || offset % pageSize !== 0
+      || offset >= candidates.length || cursor !== at(offset)) {
+      throw new AdapterError('stale_cursor', 'The page tool directory changed. Start discovery again.');
+    }
+  }
+  let limited = candidates.slice(offset, offset + pageSize);
+  if (requestedTool !== undefined) {
+    const id = typeof requestedTool === 'string' && /^(\d+)\.[0-9a-f]{32}$/.exec(requestedTool);
+    limited = id ? candidates.filter(n => n.backendDOMNodeId === Number(id[1])) : [];
+  }
+  const next = offset + pageSize;
+  const nextCursor = next < candidates.length ? at(next) : null;
   const observed = [];
   // Keep each CDP batch bounded when a page exposes many controls.
   for (let i=0; i<limited.length; i+=20) {
@@ -99,26 +151,30 @@ async function enumerate(send, frame, context, policy, tabId) {
     observed.push(...group.filter(Boolean));
   }
   const pageOperations = ['collect_assets','collect_citations'].filter(op => policy.capabilities.has(op));
-  if (pageOperations.length) observed.push({tool:{toolId:'page',role:'document',name:policy.id,disabled:false,form:null,operations:pageOperations}});
+  if (offset === 0 && pageOperations.length) observed.push({tool:{toolId:'page',role:'document',name:policy.id,disabled:false,form:null,operations:pageOperations}});
   return {
-    observed,
+    observed, nextCursor,
     unsupported: {
       childFrames:frame.childFrames,
       canvasSurfaces:nodes.filter(n => !n.ignored && n.role.value === 'Canvas').length,
       unmappedControls:limited.filter(n => !interactive.has(n.role.value.toLowerCase())).length,
       omittedControls:limited.length - observed.filter(item => item.tool.toolId !== 'page').length,
-      truncatedControls:candidates.length-limited.length,
     },
   };
 }
 
 /**
  * Register trusted browser origins once. Per-call arguments select a target, never a host, script, URL, or CSS selector.
- * @param {{endpoint:string,providers?:Array<{id:string,origins:string[],capabilities:string[],pathPrefix?:string,resourceOrigins?:string[]}>}} options Host configuration.
+ * @param {{endpoint:string,dshWebOrigin?:string,providers?:Array<{id:string,origins:string[],capabilities:string[],pathPrefix?:string,resourceOrigins?:string[]}>}} options Host configuration.
  * @returns List, discover, and invoke methods. Each call closes its CDP connection.
  */
-export function createBrowserAdapter({endpoint, providers = DEFAULT_PROVIDERS}) {
+export function createBrowserAdapter({endpoint, providers = DEFAULT_PROVIDERS, dshWebOrigin}) {
   const base = localEndpoint(endpoint);
+  if (dshWebOrigin !== undefined) {
+    const parsed = new URL(dshWebOrigin);
+    if (!['http:','https:'].includes(parsed.protocol) || !['localhost','127.0.0.1','[::1]'].includes(parsed.hostname)
+      || parsed.origin !== dshWebOrigin) throw new AdapterError('invalid_dsh_origin','Use an exact loopback DSH origin without paths or credentials.');
+  }
   const registry = new Map();
   const enrolledOrigins = new Set();
   for (const spec of providers) {
@@ -129,6 +185,7 @@ export function createBrowserAdapter({endpoint, providers = DEFAULT_PROVIDERS}) 
     }
     const origins = new Set(spec.origins.map(publicOrigin));
     for (const origin of origins) {
+      if (origin === dshWebOrigin) throw new AdapterError('invalid_dsh_origin','Keep the DSH and provider origins distinct.');
       if (enrolledOrigins.has(origin)) throw new AdapterError('invalid_provider', 'Each enrolled origin must select one provider.');
       enrolledOrigins.add(origin);
     }
@@ -139,16 +196,19 @@ export function createBrowserAdapter({endpoint, providers = DEFAULT_PROVIDERS}) 
     if (!policy) throw new AdapterError('unknown_provider', 'Select a registered provider.');
     if (invoking && !policy.capabilities.has(request.operation)) throw new AdapterError('operation_blocked', 'This operation is outside the read-only provider policy.');
     const signal = AbortSignal.timeout(12000);
-    const target = (await targets(base,signal)).find(t => t.id === request.tabId);
+    if (typeof request.tabId !== 'string') throw new AdapterError('invalid_target','Invalid browser target.');
+    const [targetId,childId] = request.tabId.split('~');
+    const target = (await targets(base,signal)).find(t => t.id === targetId);
     if (!target) throw new AdapterError('target_missing', 'The selected tab closed. List browser tabs again.');
-    if (!pageUrl(target.url,policy)) throw new AdapterError('origin_mismatch', 'The selected target is outside the provider origins.');
+    if (childId ? !isDshPage(target.url,dshWebOrigin) : !pageUrl(target.url,policy)) throw new AdapterError('origin_mismatch', 'The selected target is outside the provider origins.');
     return withPage(base,target,signal,async send => {
-      const frame = await frameState(send,policy,target.id);
+      const frame = await frameState(send,policy,request.tabId,dshWebOrigin);
       if (invoking && request.documentId !== frame.documentId) throw pageChanged();
       const {executionContextId:context} = await send('Page.createIsolatedWorld', {frameId:frame.id,worldName:'xatp-observe'});
-      const {observed, unsupported} = await enumerate(send,frame,context,policy,target.id);
+      const {observed, nextCursor, unsupported} = await enumerate(send,frame,context,policy,request.tabId,
+        invoking ? undefined : request.cursor, invoking ? request.toolId : undefined);
       let result;
-      if (!invoking) result = {tabId:target.id,providerId:policy.id,documentId:frame.documentId,url:frame.url,tools:observed.map(x => x.tool),unsupported};
+      if (!invoking) result = {tabId:request.tabId,providerId:policy.id,documentId:frame.documentId,url:frame.url,tools:observed.map(x => x.tool),nextCursor,unsupported};
       else {
         const match = observed.find(x => x.tool.toolId === request.toolId);
         if (!match) throw new AdapterError('stale_tool', 'The selected control changed. Discover its tools again.');
@@ -170,18 +230,33 @@ export function createBrowserAdapter({endpoint, providers = DEFAULT_PROVIDERS}) 
           result = request.operation === 'collect_assets' ? {items,media,truncated} : {items,truncated};
         }
       }
-      if ((await frameState(send,policy,target.id)).documentId !== frame.documentId) throw pageChanged();
+      if ((await frameState(send,policy,request.tabId,dshWebOrigin)).documentId !== frame.documentId) throw pageChanged();
       return result;
     });
   }
   return {
     async listTabs() {
       const result = [];
-      for (const target of await targets(base,AbortSignal.timeout(6000))) {
+      const signal = AbortSignal.timeout(12000);
+      for (const target of await targets(base,signal)) {
         for (const policy of registry.values()) {
           const url = pageUrl(target.url,policy);
           if (url) result.push({tabId:target.id,providerId:policy.id,url});
         }
+        if (!isDshPage(target.url,dshWebOrigin)) continue;
+        const nested = await withPage(base,target,signal,async send => {
+          const {frameTree} = await send('Page.getFrameTree');
+          const found = [];
+          if (!isDshPage(frameTree.frame.url,dshWebOrigin)) return found;
+          for (const child of frameTree.childFrames || []) {
+            for (const policy of registry.values()) {
+              const tabId = await embeddedId(send,frameTree.frame,child.frame,policy,target.id);
+              if (tabId) found.push({tabId,providerId:policy.id,url:pageUrl(child.frame.url,policy),surface:'dsh_web_iframe'});
+            }
+          }
+          return found;
+        });
+        result.push(...nested);
       }
       return result;
     },

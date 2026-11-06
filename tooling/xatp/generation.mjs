@@ -2,7 +2,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { join } from 'node:path';
-import { generationInputs, putBlob, recordRevision } from './workspace.mjs';
+import { generationInputs, putBlob, readWorkspace, recordRevision } from './workspace.mjs';
 
 const sha = data => createHash('sha256').update(data).digest('hex');
 const ref = r => ({ id: r.id, version: r.version });
@@ -80,5 +80,13 @@ function collect(directory, job, receipt) {
 export function recordCollectedRun(directory, jobId) {
   const job = getJob(directory,jobId);
   if (job?.status !== 'collected') throw new Error('RECEIPT_REQUIRED');
-  return recordRevision(directory,{ id: 'run.' + job.id, kind:'run', title:job.spec.provider + ' · ' + job.remoteId, inputs:[job.spec.prompt, job.spec.draft], data:{status:'accepted', provider:job.spec.provider, remoteId:job.remoteId, requestId:job.requestId, model:job.model, parameters:job.spec.parameters, text:job.spec.text, draftHash:job.spec.draftHash, outputHash:job.outputHash} },0);
+  const id = 'run.' + job.id;
+  try {
+    return recordRevision(directory,{ id, kind:'run', title:job.spec.provider + ' · ' + job.remoteId, inputs:[job.spec.prompt, job.spec.draft], data:{status:'accepted', provider:job.spec.provider, remoteId:job.remoteId, requestId:job.requestId, model:job.model, parameters:job.spec.parameters, text:job.spec.text, draftHash:job.spec.draftHash, outputHash:job.outputHash} },0);
+  } catch (error) {
+    if (error.message !== 'VERSION_CONFLICT') throw error;
+    const previous = readWorkspace(directory).records.find(r => r.id === id && r.kind === 'run');
+    if (previous?.data.requestId !== job.requestId || previous.data.outputHash !== job.outputHash) throw error;
+    return previous;
+  }
 }

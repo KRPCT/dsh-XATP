@@ -1,6 +1,25 @@
 {
   "observed_on": "2026-11-06",
   "public_page": "https://www.updream.cn/skills/guide-first-video-v7/examples/default",
+  "native_dsh_web_browser": {
+    "host": "built DSH Web, native Browser and XATP in adjacent Dock panes",
+    "runtime": "Chromium 153.0.8010.0 launched normally with a dedicated CDP endpoint, Playwright attached over CDP",
+    "public_page_status": 200,
+    "standalone_updream_pages": 0,
+    "matched_enrolled_dsh_children": 1,
+    "catalog_entries": 37,
+    "workbench_inspected": {"role":"button","name":"查看视频初版v2","operations":["inspect"]},
+    "accompanying_fixture": {"original_frame_removed":true,"stale_action_http_status":400,"error":"stale_document"},
+    "qualification": "Read from the existing embedded public document. No authenticated query, generation or write. An earlier Playwright-launched browser did not expose the control within 30.5 seconds."
+  },
+  "dsh_native_executor": {
+    "tools": ["xatp_list_tabs", "xatp_discover", "xatp_inspect"],
+    "target": "explicit external Chromium CDP endpoint",
+    "catalog_entries_with_public_preview_open": 44,
+    "observed_media": {"duration":8.041667,"width":864,"height":496,"readyState":4},
+    "model_turn": false,
+    "submission": false
+  },
   "updream_node_cdp": {
     "client": "tooling/xatp/browser/index.mjs",
     "browser": "Chromium 153.0.8010.0 headless shell",
@@ -23,6 +42,27 @@
     "media": {"hostname":"boss-shjd.biliapi.net","duration":8.041667,"readyState":4},
     "page_registered_webmcp_tools": 0
   },
+  "updream_iframe_probe": {
+    "surface":"Localhost HTML simulator of the DSH Web iframe policy, signed out. No DSH installation in this observation.",
+    "browser":"Chromium 153.0.8010.0 headless shell",
+    "source_policy":"packages/client/ui-sidebar-browser/src/client/view/IframePresentation.ts",
+    "sandbox":"allow-scripts allow-forms allow-same-origin allow-popups allow-popups-to-escape-sandbox",
+    "referrer_policy":"no-referrer",
+    "navigations":"Two independent loads of the same published example. The second queried the child accessibility tree.",
+    "http_status":200,
+    "redirect_observed":false,
+    "x_frame_options_observed":false,
+    "frame_ancestors_directive_observed":false,
+    "frame_policy_refusal_observed":false,
+    "child_document":"https://www.updream.cn/skills/guide-first-video-v7/examples/default",
+    "parent_dom_access":"SecurityError",
+    "cdp_page_targets":1,
+    "separate_iframe_target":false,
+    "child_frame_ax_buttons":36,
+    "matched_button_names":["查看剧本","查看视频初版v2"],
+    "provider_queries_or_generation":0,
+    "scope_limit":"This confirms the public sample renders in this iframe configuration. Authenticated workflows, another Chromium process model, desktop carriers and LeapSpace embedding were not exercised."
+  },
   "opencli_local_fixture": {
     "package":"@jackwener/opencli@2.0.2",
     "npm_integrity":"sha512-+O+S+FQikiVunP/alMG//ww9D1lpgA24+C6ifyyzI4rZVT6GEJVqaiGZWbyI2i/Hcocs4l1K6gnNt+3Yaf2wtw==",
@@ -42,6 +82,23 @@
   "leapspace": {
     "official_access":"https://www.elsevier.support/leapspace/answer/accessing-leapspace",
     "registered_route":"https://www.sciencedirect.com/leapspace",
+    "signed_out_entry_probe": {
+      "client":"Chromium 153.0.8010.0 with Node CDP and XATP discovery",
+      "requested_navigations":1,
+      "final_url":"https://www.sciencedirect.com/leapspace",
+      "redirects":0,
+      "main_document_http_status":200,
+      "main_document_mime":"text/html",
+      "document_ready_state":"complete",
+      "document_title":"Site Unavailable",
+      "accessible_controls":0,
+      "child_frames":0,
+      "sign_in_text_or_password_field_observed":false,
+      "challenge_text_or_challenge_header_observed":false,
+      "gateway_error_marker_observed":false,
+      "classification":"Unavailable page delivered over HTTP. The responsible service and cause could not be established.",
+      "queries_submitted":0
+    },
     "retrieval_observed":false,
     "source_link_extraction_verified_on":"local fixture with DOI link"
   }

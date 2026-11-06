@@ -1,0 +1,5 @@
+- id: ui-sidebar-browser
+  disabled: false
+- insert:
+    - id: xatp-workbench
+      name: "@xatp/workbench"

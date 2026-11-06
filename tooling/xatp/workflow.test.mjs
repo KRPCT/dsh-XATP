@@ -4,7 +4,7 @@ import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createRehearsal,localRenderer} from './rehearsal.mjs';
-import {submitGeneration,reconcileGeneration,getJob} from './generation.mjs';
+import {submitGeneration,reconcileGeneration,getJob,recordCollectedRun} from './generation.mjs';
 import {editPrompt,exportShot,readWorkspace,recordRevision} from './workspace.mjs';
 
 test('frozen shot, uncertain receipt, capability refusal and selective revision invalidation',async t=>{
@@ -29,6 +29,7 @@ test('frozen shot, uncertain receipt, capability refusal and selective revision 
   await assert.rejects(submitGeneration(directory,{...args,parameters:{seconds:12}},disconnected),/INTENT_CONFLICT/);
   await assert.rejects(reconcileGeneration(directory,args.id,{...disconnected,lookup:async()=>({...receipt,text:'changed'})}),/RECEIPT_MISMATCH/);
   assert.equal((await reconcileGeneration(directory,args.id,disconnected)).status,'collected');
+  assert.equal(recordCollectedRun(directory,args.id).version,recordCollectedRun(directory,args.id).version);
   assert.equal(submits,1);
   const bare=recordRevision(directory,{id:'no-citation',kind:'prompt',title:'缺失引用',inputs:[],data:{text:'无依据',creativeRationale:'演示'}},0);
   const ungrounded=recordRevision(directory,{id:'unbound-draft',kind:'draft',title:'无依据图',inputs:[bare],data:draft.data},0);

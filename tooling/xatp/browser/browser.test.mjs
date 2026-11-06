@@ -103,9 +103,62 @@ test('discovers live controls, limits reads, and rejects stale selections', {tim
     catch (error) { if (!['stale_document','origin_mismatch','cdp_command_failed'].includes(error.code)) throw error; return false; }
   });
   await assert.rejects(() => adapter.invoke({...tab,documentId:second.documentId,toolId:'page',operation:'collect_assets'}),{code:'stale_document'});
+  await modifyFixture(`const group=document.createElement('section');
+    for(let i=0;i<411;i++){const b=document.createElement('button');b.textContent='Batch '+i;group.append(b)}
+    document.body.append(group)`);
+  const first = await adapter.discover(tab);
+  assert.ok(first.nextCursor);
+  const collected = [...first.tools];
+  let page = first;
+  while (page.nextCursor) {
+    assert.ok(collected.length < 600);
+    page = await adapter.discover({...tab,cursor:page.nextCursor});
+    assert.equal(page.documentId,first.documentId);
+    collected.push(...page.tools);
+  }
+  assert.equal(collected.filter(x => x.role === 'document').length,1);
+  assert.equal(new Set(collected.map(x => x.toolId)).size,collected.length);
+  assert.equal(collected.filter(x => x.name.startsWith('Batch ')).length,411);
+  const last = page.tools.at(-1);
+  assert.equal((await adapter.invoke({...tab,documentId:first.documentId,toolId:last.toolId,operation:'inspect'})).name,last.name);
+  await modifyFixture("document.querySelector('section button').textContent='Renamed batch entry'");
+  await assert.rejects(() => adapter.discover({...tab,cursor:first.nextCursor}),{code:'stale_cursor'});
   for (const pathname of ['/science/article/pii/123','/fixture-foreign','/login']) {
     await modifyFixture('history.replaceState(null,"",' + JSON.stringify(pathname) + ')');
     assert.deepEqual(await adapter.listTabs(),[]);
     await assert.rejects(() => adapter.discover(tab),{code:'origin_mismatch'});
   }
+
+  const policy = 'sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer"';
+  const host = createServer((_req,res) => {
+    res.writeHead(200,{'Content-Type':'text/html'});
+    res.end('<iframe '+policy+' src="'+origin+'/fixture"></iframe>' +
+      '<iframe id="dsh" data-sidebar-browser-frame="iframe" '+policy+' src="'+origin+'/fixture"></iframe>');
+  });
+  await new Promise(resolve => host.listen(0,'127.0.0.1',resolve));
+  t.after(() => new Promise(resolve => {host.close(resolve);host.closeAllConnections();}));
+  const hostOrigin = 'http://127.0.0.1:'+host.address().port;
+  const embedded = createBrowserAdapter({endpoint,providers,dshWebOrigin:hostOrigin});
+  await modifyFixture('location.href='+JSON.stringify(hostOrigin));
+  const entries = await until(async () => {const list=await embedded.listTabs();return list.length ? list : null;});
+  assert.equal(entries.length,1);
+  assert.deepEqual(await adapter.listTabs(),[]);
+  const entry = entries[0];
+  assert.equal(entry.surface,'dsh_web_iframe');
+  const directory = await embedded.discover(entry);
+  const link = directory.tools.find(x=>x.name==='Public clip');
+  const binding = {...entry,documentId:directory.documentId,toolId:link.toolId,operation:'read_link'};
+  assert.deepEqual(await embedded.invoke(binding),{url:origin+'/clip.mp4'});
+  await modifyFixture("document.querySelector('#dsh').removeAttribute('data-sidebar-browser-frame')");
+  assert.deepEqual(await embedded.listTabs(),[]);
+  await assert.rejects(()=>embedded.invoke(binding),{code:'stale_document'});
+  await modifyFixture("document.querySelector('#dsh').dataset.sidebarBrowserFrame='iframe'; document.querySelector('#dsh').src += '/next'");
+  const moved = await until(async () => (await embedded.listTabs()).find(x=>x.url.endsWith('/next')));
+  assert.notEqual(moved.tabId,entry.tabId);
+  await assert.rejects(()=>embedded.discover(entry),{code:'stale_document'});
+  await modifyFixture("document.querySelector('#dsh').replaceWith(document.querySelector('#dsh').cloneNode())");
+  await until(async () => (await embedded.listTabs()).some(x=>x.tabId!==moved.tabId));
+  await assert.rejects(()=>embedded.discover(moved),{code:'stale_document'});
+  await modifyFixture("history.replaceState(null,'','/untrusted-document')");
+  assert.deepEqual(await embedded.listTabs(),[]);
 });
