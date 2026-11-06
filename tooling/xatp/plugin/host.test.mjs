@@ -32,8 +32,17 @@ test('native tools share versioned project state and reject stale revisions', {t
     return JSON.parse(result.content[0].text);
   }
   assert.deepEqual(ctx.tools.schemas().map(s => s.name).sort(),[
-    'xatp_discover','xatp_edit_prompt','xatp_export_shot','xatp_inspect','xatp_list_tabs','xatp_read_workspace','xatp_render_roc_draft',
+    'xatp_configure_h3_minimum','xatp_discover','xatp_edit_prompt','xatp_export_shot','xatp_inspect','xatp_list_tabs',
+    'xatp_orchestration_compile','xatp_orchestration_read','xatp_orchestration_run','xatp_orchestration_save',
+    'xatp_quote_h3','xatp_read_workspace','xatp_render_roc_draft','xatp_select_h3','xatp_select_h3_mode',
   ]);
+  const workflow = await execute('xatp_orchestration_read');
+  const saved = await execute('xatp_orchestration_save',{plan:workflow.plan,revision:workflow.revision});
+  assert.equal(saved.revision,workflow.revision+1);
+  const slice = await execute('xatp_orchestration_run',{targetId:'updream-01',mode:'dry-run'});
+  assert.equal(slice.estimates['updream-01'].credits,250);
+  assert.equal(slice.receipts.at(-1).prompt,workflow.plan.nodes[0].params.text);
+  await assert.rejects(execute('xatp_orchestration_save',{plan:workflow.plan,revision:workflow.revision}),/VERSION_CONFLICT/);
   const state = await execute('xatp_read_workspace');
   const prompt = state.records.find(r => r.kind === 'prompt');
   const shot = await execute('xatp_export_shot',manifest.shot);
@@ -63,6 +72,40 @@ test('native tools share versioned project state and reject stale revisions', {t
   const changed = await execute('xatp_read_workspace');
   assert.ok(changed.records.find(r => r.kind === 'shot').stale);
   await assert.rejects(execute('xatp_export_shot',manifest.shot),/CURRENT_SHOT_REQUIRED/);
+  // Opt in with a consciously selected, empty video node on an authenticated canvas.
+  // Check the exact minimum live quote before any draft edit. No model/quote/target identifiers enter logs.
+  if (process.env.XATP_TEST_UPDREAM_DRAFT_TAB) {
+    const tabId = process.env.XATP_TEST_UPDREAM_DRAFT_TAB;
+    assert.ok((await execute('xatp_list_tabs')).some(tab=>tab.providerId==='updream' && tab.tabId===tabId),'Selected canvas is unavailable');
+    const {documentId,tools} = await execute('xatp_discover',{tabId,providerId:'updream'});
+    function bind(surface,operation) {
+      const matches = tools.filter(tool=>tool.surface===surface && tool.operations.includes(operation));
+      assert.equal(matches.length,1,'Require a unique discovered '+surface+' control');
+      return {tabId,documentId,toolId:matches[0].toolId};
+    }
+    const quote = await execute('xatp_quote_h3',{binding:bind('video_settings','inspect_h3_quote')});
+    assert.equal(quote.model,'MiniMax H3');
+    assert.equal(quote.resolution,'768P');
+    assert.equal(quote.seconds,5);
+    assert.equal(quote.displayedCredits,250);
+    const settings = tools.find(t=>t.surface==='video_settings' && t.operations.includes('select_h3_mode'));
+    assert.ok(settings?.h3Modes.available.includes(settings?.h3Modes.selected),'Require a verified active H3 mode');
+    // Read back the current mode through the native tool without changing the project's setting.
+    const mode = await execute('xatp_select_h3_mode',{binding:bind('video_settings','select_h3_mode'),mode:settings.h3Modes.selected});
+    assert.equal(mode.model,quote.model);
+    assert.equal(mode.mode,settings.h3Modes.selected);
+    assert.equal(mode.creditsSpent,0);
+    const request = {targetId:'updream-01',mode:'live',binding:bind('video','prepare_prompt')};
+    for (let check = 0; check < 2; check++) {
+      const live = await execute('xatp_orchestration_run',request);
+      assert.equal(live.ok,true,live.errors.join(' '));
+      const receipt = live.receipts.find(r=>r.nodeId===request.targetId);
+      assert.equal(receipt.status,'verified');
+      assert.equal(receipt.prompt,saved.plan.nodes[0].params.text);
+      assert.equal(receipt.creditsSpent,0);
+    }
+    t.diagnostic('Authenticated MiniMax H3 video editor verified exact draft readback and retry; minimum quote 250; no generation.');
+  }
   if (process.env.XATP_TEST_PUBLIC_PROVIDER) {
     const providerId = process.env.XATP_TEST_PUBLIC_PROVIDER;
     const tab = (await execute('xatp_list_tabs')).find(row => row.providerId === providerId);

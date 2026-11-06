@@ -36,9 +36,20 @@ window.__ModuleLoader__.load({
               if (!response.ok) throw new Error(value.error || 'XATP_REQUEST_FAILED');
               return value;
             };
+            const editorHandle = ref => ref && ({tabId:ref.tabId,documentId:ref.documentId,toolId:ref.toolId});
             const workbench = mountWorkbench(root.current, {
               locale, observation, read:call('read'), listTabs:call('listTabs'), discover:call('discover'),
               inspect:call('inspect'),editPrompt:call('editPrompt'),
+              workflow:{
+                read:call('orchestration_read'),
+                configureH3Minimum:binding => call('configureH3Minimum')({binding:editorHandle(binding)}),
+                selectH3Mode:(binding,mode) => call('selectH3Mode')({binding:editorHandle(binding),mode}),
+                selectH3:binding => call('selectH3')({binding:editorHandle(binding)}),
+                quoteH3:binding => call('quoteH3')({binding:editorHandle(binding)}),
+                save:(plan,revision) => call('orchestration_save')({plan,revision}),
+                compile:(plan,targetId) => call('orchestration_compile')({plan,targetId}),
+                run:(plan,targetId,mode='dry-run',binding) => call('orchestration_run')({plan,targetId,mode,binding:editorHandle(binding)}),
+              },
               previewURL:hash => 'api/xatp.preview?digest=' + encodeURIComponent(hash),
             });
             return () => { abort.abort(); workbench.destroy(); };

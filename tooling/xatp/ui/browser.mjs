@@ -73,8 +73,61 @@ export function mountBrowser(root, api, t, { el, button, search, heading }) {
     const output = el('div', 'x-output');
     output.setAttribute('aria-live', 'polite');
     inspector.append(output);
+    if (api.bindEditor && catalog.providerId === 'updream' && tool.operations?.includes('prepare_prompt') && !tool.disabled) {
+      actions.append(button('绑定到当前节点', () => api.bindEditor({tabId:catalog.tabId, documentId:catalog.documentId, toolId:tool.toolId, surface:tool.surface}), 'x-btn x-primary'));
+    }
+    if (catalog.providerId === 'updream' && tool.surface === 'video_settings' && !tool.disabled) {
+      const ref = {tabId:catalog.tabId,documentId:catalog.documentId,toolId:tool.toolId};
+      const settings = async (method,mode) => {
+        const request = ++epoch;
+        for (const control of actions.querySelectorAll('button,select')) control.disabled = true;
+        try {
+          const result = await api.workflow[method](ref,...(mode ? [mode] : []));
+          if (!current(request)) return;
+          output.replaceChildren();
+          if (mode) {
+            if (result.mode !== mode || result.model !== 'MiniMax H3') throw new Error('站内模式读回不一致');
+            tool.h3Modes.selected = result.mode;
+            output.append(el('p','','站内已选 · '+result.mode));
+          } else if (Number.isFinite(result.displayedCredits)) {
+            output.append(el('p','',result.model+' · '+result.seconds+'s / '+result.resolution+' · '+result.displayedCredits+' 积分'));
+            api.onSiteQuote?.(result,ref);
+          } else output.append(el('p','','已选择 '+result.model));
+        } catch(error) {
+          if (!current(request)) return;
+          catalog = selected = undefined;
+          controlsForTab();
+          inspector.replaceChildren();
+          notice(inspector,t('inspectFailed'),error);
+        } finally {
+          if (current(request)) for (const control of actions.querySelectorAll('button,select')) control.disabled = false;
+        }
+      };
+      for (const [op,method,label] of [
+        ['select_h3','selectH3','选择 MiniMax H3'], ['inspect_h3_quote','quoteH3','读取站内报价'],
+        ['configure_h3_minimum','configureH3Minimum','设置 5 秒 / 768P'],
+      ]) {
+        if (!api.workflow?.[method] || !tool.operations?.includes(op)) continue;
+        actions.append(button(label,() => settings(method),'x-btn'));
+      }
+      const modes = tool.h3Modes;
+      if (catalog.documentId && api.workflow?.selectH3Mode && tool.operations?.includes('select_h3_mode') &&
+          Array.isArray(modes?.available) && modes.available.includes(modes.selected)) {
+        const label = el('label','','站内模式 ');
+        const mode = el('select','x-input');
+        for (const name of modes.available) {
+          const option = el('option','',name);
+          option.value = name;
+          mode.append(option);
+        }
+        mode.value = modes.selected;
+        mode.addEventListener('change',() => settings('selectH3Mode',mode.value));
+        label.append(mode);
+        actions.append(label);
+      }
+    }
     const operations = (tool.operations ?? []).filter((op) => READ_OPERATIONS.has(op));
-    if (!operations.length) notice(actions, t('noAllowed'));
+    if (!operations.length && !actions.children.length) notice(actions, t('noAllowed'));
     for (const operation of operations) {
       const run = button(t(operation), async () => {
         const request = ++epoch;

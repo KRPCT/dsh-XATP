@@ -1,4 +1,4 @@
-# XATP evidence workbench
+# XATP 制作画布
 
 This feature branch hosts the editor, a revision ledger, a semantic browser adapter and executable acceptance probes. [Issues and milestones](https://github.com/KRPCT/dsh-XATP/issues/1) track production work. The [domain glossary](CONTEXT.md) fixes the user-facing vocabulary. The [Agent Note](../../.agents/notes/proposed/architecture/2026-11-06-xatp-evidence-workbench.md) records evidence ownership.
 
@@ -14,7 +14,9 @@ node tooling/xatp/preview.mjs /tmp/xatp-new-demo /tmp/xatp-review.html
 node tooling/xatp/freeze-shot.mjs /tmp/xatp-new-demo shot.01 1 /tmp/xatp-shot-01
 ```
 
-Open the HTML in a modern browser. It includes the playable film, its deterministic draft, nine versioned objects, their revision links and a read-only observation from a public Updream canvas. Editing a prompt in this portable view lasts until reload. The host ledger persists edits. The video route requires FFmpeg with librsvg and libvpx-vp9. For an image-only run without FFmpeg, use `rehearsal.mjs` with a new directory. Fawcett's [paper](https://doi.org/10.1016/j.patrec.2005.10.010) supplies the ROC method. The eight synthetic scores and renderer live in `roc-renderer.mjs`. The Agent can create a draft with new simulated scores through `xatp_render_roc_draft`.
+打开 HTML 即可在同一工作台编辑文本、连线和镜头参数，保存计划，排演所选节点，查看每一步使用的提示词。独立 HTML 在浏览器允许时把已保存计划保存在本地；DSH Web 将计划版本写入所选工程的 SQLite。素材与来源抽屉仍可访问原有九条记录及教学样片。成片目标为 110–118 秒。打开时展示的 5 秒镜头用于排演。
+
+测试模型固定为 MiniMax H3。5 秒 768P 无参考视频的站内报价为 250 积分，本轮可花费 0，总预算 100。详情见 [零积分验收](e2e/README.md)。
 
 ## Integration responsibilities
 
@@ -24,7 +26,7 @@ Open the HTML in a modern browser. It includes the playable film, its determinis
 | `authoring.mjs` | The editor and the host use the same prompt revision and downstream invalidation rules. Only prompt text and the creative rationale are editable through this command. |
 | `generation.mjs` | A provider advertises reference-image support, a provider ID, project mode and cost. The submission intent is durable before dispatch. Another call with its ID never resubmits. Recovery asks the originating provider for a matching request and retains the output bytes before editorial acceptance. Only free adapters are admitted in this slice. |
 | [Browser adapter](browser/README.md) | Agent and panel inspect the same document-bound capability directory. Observation of a button does not grant a click operation. The coverage fields record page surfaces the adapter cannot inspect. |
-| [Panel](ui/README.md) | Editors inspect shots, browse the dependency graph, read browser tools, revise prompts, and find affected assets. |
+| [Panel](ui/README.md) | A node canvas owns prompts, typed connections, shot parameters and selective rehearsal. Secondary drawers preserve shots, assets and browser tools. |
 | [Live gate](e2e/README.md) | Readiness and release qualification have separate outputs. Missing authenticated transactions keep the release blocked. |
 
 The SQLite file and its sibling `objects/` directory form one project backup. Keep both and take the backup with writers stopped. The local object reader currently loads complete files into memory. Large production media need a streaming object store before release. Ledger import is a trusted host operation. An untrusted prompt must never be able to supply a query receipt, approve its own factual interpretation or mark an output as visually reviewed.

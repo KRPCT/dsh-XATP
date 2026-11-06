@@ -1,14 +1,16 @@
-/** Read-only browser semantics for explicitly enrolled pages. Requires Node 24 and loopback Chromium CDP. */
+/** Document-bound browser semantics for explicitly enrolled pages. Requires Node 24 and loopback Chromium CDP. */
 import {createHash} from 'node:crypto';
 import {AdapterError, localEndpoint, targets, withPage} from './cdp.mjs';
 import {inspectElement, readPageItems} from './page.mjs';
 
-const operations = ['inspect', 'read_link', 'collect_assets', 'collect_citations'];
+import {discoverDrafts, draftOperations, invokeDraft} from '../updream/draft.mjs';
+
+const operations = ['inspect', 'read_link', 'collect_assets', 'collect_citations', ...draftOperations];
 const interactive = new Set('button link textbox searchbox combobox listbox option checkbox radio switch slider spinbutton tab menuitem menuitemcheckbox menuitemradio treeitem disclosuretriangle'.split(' '));
 
 /** Origin and operation policy supplied by the host, outside the agent's tool inputs. */
 export const DEFAULT_PROVIDERS = [
-  {id:'updream', origins:['https://updream.cn','https://www.updream.cn'], capabilities:['inspect','read_link','collect_assets'],resourceOrigins:['https://boss-shjd.biliapi.net']},
+  {id:'updream', origins:['https://updream.cn','https://www.updream.cn'], capabilities:['inspect','read_link','collect_assets',...draftOperations],resourceOrigins:['https://boss-shjd.biliapi.net']},
   {id:'leapspace', origins:['https://www.sciencedirect.com'],pathPrefix:'/leapspace', capabilities:['inspect','read_link','collect_citations'],
     resourceOrigins:['https://doi.org','https://www.sciencedirect.com','https://linkinghub.elsevier.com','https://pubmed.ncbi.nlm.nih.gov']},
 ];
@@ -95,7 +97,7 @@ async function frameState(send, policy, tabId, hostOrigin) {
   const url = pageUrl(frame.url, policy);
   if (!url) throw new AdapterError('origin_mismatch', 'The selected page is outside the provider origins.');
   const documentId = hash([tabId, frame.id, frame.loaderId, frame.url, frame.urlFragment || '']);
-  return {id:frame.id, documentId, url, childFrames:frameTree.childFrames?.length || 0};
+  return {id:frame.id, documentId, url, href:frame.url + (frame.urlFragment || ''), childFrames:frameTree.childFrames?.length || 0};
 }
 
 async function currentTool(send, context, node, policy, tabId, documentId) {
@@ -150,6 +152,10 @@ async function enumerate(send, frame, context, policy, tabId, cursor, requestedT
     const group = await Promise.all(limited.slice(i, i+20).map(node => currentTool(send,context,node,policy,tabId,frame.documentId)));
     observed.push(...group.filter(Boolean));
   }
+  const omittedControls = limited.length - observed.length;
+  if (offset === 0 && (requestedTool === undefined || String(requestedTool).startsWith('draft.'))) {
+    observed.push(...await discoverDrafts(send,context,policy,frame,hash,nodes));
+  }
   const pageOperations = ['collect_assets','collect_citations'].filter(op => policy.capabilities.has(op));
   if (offset === 0 && pageOperations.length) observed.push({tool:{toolId:'page',role:'document',name:policy.id,disabled:false,form:null,operations:pageOperations}});
   return {
@@ -158,7 +164,7 @@ async function enumerate(send, frame, context, policy, tabId, cursor, requestedT
       childFrames:frame.childFrames,
       canvasSurfaces:nodes.filter(n => !n.ignored && n.role.value === 'Canvas').length,
       unmappedControls:limited.filter(n => !interactive.has(n.role.value.toLowerCase())).length,
-      omittedControls:limited.length - observed.filter(item => item.tool.toolId !== 'page').length,
+      omittedControls,
     },
   };
 }
@@ -194,7 +200,7 @@ export function createBrowserAdapter({endpoint, providers = DEFAULT_PROVIDERS, d
   async function observe(request, invoking) {
     const policy = registry.get(request.providerId);
     if (!policy) throw new AdapterError('unknown_provider', 'Select a registered provider.');
-    if (invoking && !policy.capabilities.has(request.operation)) throw new AdapterError('operation_blocked', 'This operation is outside the read-only provider policy.');
+    if (invoking && !policy.capabilities.has(request.operation)) throw new AdapterError('operation_blocked', 'This operation is outside the provider policy.');
     const signal = AbortSignal.timeout(12000);
     if (typeof request.tabId !== 'string') throw new AdapterError('invalid_target','Invalid browser target.');
     const [targetId,childId] = request.tabId.split('~');
@@ -213,7 +219,10 @@ export function createBrowserAdapter({endpoint, providers = DEFAULT_PROVIDERS, d
         const match = observed.find(x => x.tool.toolId === request.toolId);
         if (!match) throw new AdapterError('stale_tool', 'The selected control changed. Discover its tools again.');
         if (!match.tool.operations.includes(request.operation)) throw new AdapterError('operation_blocked', 'This control does not expose that operation.');
-        if (request.operation === 'inspect') result = match.tool;
+        if (match.tool.surface) {
+          if ((await frameState(send,policy,request.tabId,dshWebOrigin)).documentId !== frame.documentId) throw pageChanged();
+          result = await invokeDraft(send,frame,match,request);
+        } else if (request.operation === 'inspect') result = match.tool;
         else if (request.operation === 'read_link') result = {url:match.url};
         else {
           const response = await send('Runtime.callFunctionOn', {executionContextId:context,functionDeclaration:readPageItems.toString(),arguments:[{value:request.operation},{value:[...policy.allowed]}],returnByValue:true});

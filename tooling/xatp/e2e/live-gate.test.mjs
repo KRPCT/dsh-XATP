@@ -12,11 +12,14 @@ const executable = fileURLToPath(new URL('./live-gate.mjs',import.meta.url));
 
 test('ready preflight leaves each hosted transaction and release gate blocked', () => {
   const report = finalReport({ready:true,dsh:'host_challenge_observed',deepseek_environment_key:'present_unverified',
-    browser:{cdp:'reachable',updream:'document_observed',leapspace:'document_observed'}});
+    browser:{cdp:'reachable',updream:'document_observed'}});
   assert.equal(report.status,'blocked');
   assert.equal(report.transaction_attempted,false);
-  assert.equal(report.gates.find(x => x.id === 'updream_generation').status,'adapter_missing');
-  assert.ok(report.gates.every(x => ['adapter_missing','unverified'].includes(x.status)));
+  assert.deepEqual(report.creditPolicy,{model:'MiniMax H3',spendNow:0,totalLimit:100,minimumQuote:250});
+  assert.equal(report.gates.find(x=>x.id==='updream_h3_generation').status,'out_of_budget');
+  assert.equal(report.gates.find(x => x.id === 'updream_prompt_dispatch').status,'unverified');
+  assert.deepEqual(report.filmPlanSeconds,{minimum:110,maximum:118,inclusive:true});
+  assert.ok(report.deferred.includes('elsevier_live_research'));
 });
 
 test('rejects a supplied success file and ignores success flags', t => {

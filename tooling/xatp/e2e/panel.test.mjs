@@ -6,16 +6,16 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
-import { execFileSync } from 'node:child_process';
+import { createRehearsal } from '../rehearsal.mjs';
 import { writePreview } from '../preview.mjs';
 
 const { chromium } = createRequire(new URL('../../../../apps/web/package.json',import.meta.url))('playwright');
 
-test('inspect a real local film, trace records, edit a prompt and inspect read-only observations', {timeout:60000}, async t => {
+test('edit, save and rehearse an offline workflow while preserving the evidence drawers', {timeout:60000}, async t => {
   const dir = mkdtempSync(join(tmpdir(),'xatp-panel-'));
   t.after(()=>rmSync(dir,{recursive:true,force:true}));
   const project = join(dir,'project'), html = join(dir,'index.html');
-  execFileSync(process.execPath,[new URL('../rehearsal-video.mjs',import.meta.url).pathname,project],{timeout:35000});
+  await createRehearsal(project);
   writePreview(project,html);
   const browser=await chromium.launch({executablePath:process.env.CHROMIUM_BIN,args:['--disable-gpu','--disable-background-networking']});
   t.after(()=>browser.close());
@@ -24,19 +24,21 @@ test('inspect a real local film, trace records, edit a prompt and inspect read-o
   page.on('pageerror',error=>errors.push(error.message));
   page.on('request',r=>{if(/^https?:/.test(r.url())) network.push(r.url());});
   await page.goto(pathToFileURL(html).href);
-  const film=page.locator('video');
-  await film.waitFor({timeout:5000});
-  await page.waitForFunction(()=>document.querySelector('video')?.duration===6);
-  assert.equal(await film.evaluate(v=>v.videoWidth),720);
-  assert.ok(await film.getAttribute('poster'));
-  await film.evaluate(async v=>{await v.play();v.currentTime=3.5;});
-  await page.waitForFunction(()=>document.querySelector('video')?.currentTime>=3.5);
-  await film.evaluate(v=>v.pause());
-  await page.locator('.x-ref').filter({hasText:'如何解释分类阈值'}).press('Enter');
-  assert.equal(await page.locator('.x-title').innerText(),'如何解释分类阈值？');
-  await page.locator('.x-ref').filter({hasText:'An introduction to ROC analysis'}).press('Enter');
-  await page.getByText('记录详情',{exact:true}).click();
-  assert.ok((await page.locator('body').innerText()).includes('10.1016/j.patrec.2005.10.010'));
+  const field=page.locator('[data-node-type="updream"] textarea');
+  await field.fill('镜头验收：保留模型草稿中的刻度和注释。');
+  await page.getByRole('button',{name:'保存工作流'}).click();
+  await page.getByRole('button',{name:'排演节点'}).click();
+  await page.getByText(/完成 2 个节点的排演/).first().waitFor();
+  await page.reload();
+  await field.waitFor();
+  assert.equal(await field.inputValue(),'镜头验收：保留模型草稿中的刻度和注释。');
+  assert.equal(await page.locator('[data-node-id]').count(),3);
+  await page.getByRole('button',{name:'运行历史'}).click();
+  await page.locator('.xc-receipt').first().waitFor();
+  assert.equal(await page.locator('.xc-receipt').count(),2);
+  await page.getByText('查看本次提示词',{exact:true}).click();
+  assert.equal(await page.locator('.xc-used-prompt p').innerText(),await field.inputValue());
+  await page.getByRole('button',{name:'镜头与剪辑'}).click();
   await page.locator('button[data-view="assets"]').click();
   await page.locator('.x-row').filter({hasText:'锁定坐标轴'}).click();
   await page.getByRole('button',{name:'编辑提示词',exact:true}).click();
@@ -54,8 +56,10 @@ test('inspect a real local film, trace records, edit a prompt and inspect read-o
     await page.setViewportSize({width,height:844});
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'overflow at '+width);
   }
-  await page.locator('button[data-view="shots"]').press('ArrowRight');
-  assert.equal(await page.locator('.x-canvas').count(),1);
+  await page.getByRole('button',{name:'返回画布'}).click();
+  await page.getByRole('button',{name:'添加节点'}).click();
+  assert.equal(await page.locator('.xc-popup button').count(),7);
+  assert.equal(await page.locator('.xc-popup button:disabled').count(),3);
   assert.deepEqual(network,[]);
   assert.deepEqual(errors,[]);
 });

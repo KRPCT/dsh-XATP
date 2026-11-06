@@ -1,6 +1,6 @@
 # XATP workbench panel
 
-Load `workbench.css` beside the host UI and call `mountWorkbench(container, actions)` from `workbench.mjs`. The panel adopts DSH theme tokens, uses its container width to arrange the catalog and inspector, and owns only its container. The host remains responsible for project selection, access, transport and file storage.
+Load `workbench.css` beside the host UI and call `mountWorkbench(container, actions)` from `workbench.mjs`. The root opens a dark Updream-style editable canvas. The host can resize it as a regular DSH dock pane. The project rail opens the existing record and browser views. The host remains responsible for project selection, access, transport and file storage.
 
 | Action or option | Data |
 | --- | --- |
@@ -12,10 +12,12 @@ Load `workbench.css` beside the host UI and call `mountWorkbench(container, acti
 
 The returned handle exposes async `refresh()` for committed project changes and `destroy()` for host disposal. Browser navigation invalidates prior discovery and invocation results. No browser or record data is seeded by the panel.
 
+The `workflow` API supplies read, save, compile and run operations. The canvas supports local edits, typed wiring, pan, zoom, undo and selective rehearsal. A hosted draft requires a matching enrolled editor.
+
 Shots show timeline placement and the closest previewable upstream record. The workflow canvas shows the selected revision between its immediate inputs and uses. Select a node to navigate. Full edge lists below the canvas retain larger fan-outs. The inspector can jump to original queries and related shots transitively. The asset directory pages concepts, prompts, drafts and assets. Historical versions remain accessible from the version picker. Searching narrows the active directory.
 
 The prompt editor saves a new revision. A conflict keeps the working draft pinned to its original revision. Selecting a different record and returning restores the draft while the panel stays mounted.
 
-Browser tools are discovered on a selected provider tab. Each result documents its role, form, disabled state and read operations. Only `inspect`, `read_link`, `collect_assets` and `collect_citations` are available. Selecting an operation passes the bound tab, adapter, document and tool identities to the host. A failed read requires fresh discovery. Content returned from providers is rendered as text.
+Browser tools are discovered on a selected provider tab. Each result documents its role, form, disabled state and read operations. Generic inspection exposes `inspect`, `read_link`, `collect_assets` and `collect_citations`. Selected Updream editors may additionally advertise explicitly scoped draft and H3 operations. Selecting an operation passes the bound tab, adapter, document and tool identities to the host. A failed read requires fresh discovery. Content returned from providers is rendered as text.
 
 Tab reaches controls in document order. The view navigation also accepts Left, Right, Home and End. Activating a record focuses its title. The inspector's Back and Forward controls traverse selected revisions. Browser search retains focus while results update.

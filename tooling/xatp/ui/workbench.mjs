@@ -1,3 +1,4 @@
+import { mountCanvas } from './canvas.mjs';
 import { mountBrowser } from './browser.mjs';
 import { elements } from './dom.mjs';
 import { promptEditor } from './prompt.mjs';
@@ -25,6 +26,10 @@ function belongs(record, view) {
  * @returns {{refresh: () => Promise<void>, destroy: () => void}} Lifecycle handle for the host.
  */
 export function mountWorkbench(root, api) {
+  return mountCanvas(root, api, mountRecords);
+}
+
+function mountRecords(root, api, initialView = 'shots') {
   const doc = root.ownerDocument;
   const t = translator(api.locale ?? doc.documentElement.lang ?? 'en');
   const ui = elements(doc);
@@ -50,7 +55,7 @@ export function mountWorkbench(root, api) {
 
   let graph = recordGraph([]);
   let data;
-  let view = 'shots';
+  let view = initialView;
   let selected;
   let query = '';
   let kind = '';

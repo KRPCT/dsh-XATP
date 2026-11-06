@@ -1,0 +1,31 @@
+{
+  "observedOn": "2026-11-06",
+  "origin": "https://www.updream.cn",
+  "transport": "Authenticated browser UI inspection; the account, project identifiers and session credentials are omitted.",
+  "workArea": "/canvas",
+  "observedActions": [
+    "Created and renamed an isolated empty canvas.",
+    "Opened the AI assistant, filled a Chinese prompt and read back the exact text. The separate Send control became enabled.",
+    "Created empty text, image and video nodes. Opened the text node's manual editor, saved authored text and verified it in the canvas.",
+    "Filled the selected video node's own prompt editor and read back the exact text.",
+    "Inspected the video model menu, chose MiniMax H3 (distinct from MiniMax H3 Max) and verified the selected label.",
+    "Read duration limits, changed image quality, checked both displayed H3 quotes against the platform tariff and inspected credit consumption."
+  ],
+  "addMenu": ["文本", "图片", "视频", "音频", "Agent", "预演台", "上传"],
+  "defaultModelVideoModesObservedBeforeSelectingH3": ["全能参考", "图生视频", "首尾帧", "视频编辑", "文生视频"],
+  "videoModelMenuEntries": 22,
+  "imageModelMenuEntries": 16,
+  "h3": {
+    "modesSelectedAndReadBack": ["参考生视频", "图生视频", "首尾帧", "文生视频"],
+    "modeEvidence": "Each mode was selected on the authenticated H3 node and its aria-pressed state read back. No input attachment or generation was submitted.",
+    "source": "积分详情 → 积分计费表 → 视频模型 → MiniMax H3, checked against the selected canvas node",
+    "durationControl": {"min": 5, "max": 15, "step": 1},
+    "observedQuotes": [
+      {"quality": "768P", "outputSeconds": 5, "referenceVideoSeconds": 0, "pointsPerOutputSecond": 50, "pointsPerReferenceVideoSecond": 50, "displayedPoints": 250},
+      {"quality": "2K", "outputSeconds": 5, "referenceVideoSeconds": 0, "pointsPerOutputSecond": 85, "pointsPerReferenceVideoSecond": 85, "displayedPoints": 425}
+    ],
+    "generationSubmitted": false,
+    "creditChangeObserved": 0
+  },
+  "limits": ["Counts describe the menus on this account and date.", "The official price table describes reference-video fees. The UI quote check used no reference video.", "Per-account balances and funding history are not portable feature evidence.", "No AI request was sent, output retrieved, or generated content judged."]
+}
