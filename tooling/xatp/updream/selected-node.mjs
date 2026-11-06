@@ -1,10 +1,9 @@
-/** Bind a floating video editor to the selected graph node without exporting the site's node ID. */
+/** Bind an editor to one selected graph node without exporting the site's node ID. */
 import {randomBytes} from 'node:crypto';
 
 const salt = randomBytes(24).toString('hex');
 
-async function captureSelection(href,salt) {
-  const selector = '.canvas-node.canvas-node-video.selected[data-node-id]';
+async function captureSelection(href,salt,selector) {
   const nodes = document.querySelectorAll(selector);
   if (location.href !== href || nodes.length !== 1) return null;
   const node = nodes[0];
@@ -17,12 +16,18 @@ async function captureSelection(href,salt) {
   const bytes = await crypto.subtle.digest('SHA-256',new TextEncoder().encode(salt+'\0'+id));
   if (!current()) return null;
   const digest = Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,'0')).join('');
-  return {node,current,digest};
+  // Only post-save readback may reacquire a React-replaced element with the original private identity.
+  const reacquire = () => {
+    if (location.href!==href) return null;
+    const selected=document.querySelectorAll(selector);
+    return selected.length===1 && selected[0].dataset.nodeId===id ? selected[0] : null;
+  };
+  return {node,current,reacquire,digest};
 }
 
-export async function bindVideoSelection(send,context,href) {
+export async function bindNodeSelection(send,context,href,selector) {
   const binding = await send('Runtime.callFunctionOn',{executionContextId:context,functionDeclaration:captureSelection.toString(),
-    arguments:[{value:href},{value:salt}],awaitPromise:true});
+    arguments:[{value:href},{value:salt},{value:selector}],awaitPromise:true});
   const objectId = binding.result.objectId;
   if (binding.exceptionDetails || !objectId) return null;
   const node = await send('Runtime.callFunctionOn',{objectId,functionDeclaration:'function(){return this.node}'});

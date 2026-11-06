@@ -32,9 +32,9 @@ test('native tools share versioned project state and reject stale revisions', {t
     return JSON.parse(result.content[0].text);
   }
   assert.deepEqual(ctx.tools.schemas().map(s => s.name).sort(),[
-    'xatp_configure_h3_minimum','xatp_discover','xatp_edit_prompt','xatp_export_shot','xatp_inspect','xatp_list_tabs',
+    'xatp_check_h3_draft','xatp_configure_h3_minimum','xatp_discover','xatp_edit_prompt','xatp_export_shot','xatp_inspect','xatp_list_tabs',
     'xatp_orchestration_compile','xatp_orchestration_read','xatp_orchestration_run','xatp_orchestration_save',
-    'xatp_quote_h3','xatp_read_workspace','xatp_render_roc_draft','xatp_select_h3','xatp_select_h3_mode',
+    'xatp_quote_h3','xatp_read_node_text','xatp_read_workspace','xatp_render_roc_draft','xatp_save_node_text','xatp_select_h3','xatp_select_h3_mode',
   ]);
   const workflow = await execute('xatp_orchestration_read');
   const saved = await execute('xatp_orchestration_save',{plan:workflow.plan,revision:workflow.revision});

@@ -61,7 +61,7 @@ export function mountBrowser(root, api, t, { el, button, search, heading }) {
     if (!selected) return notice(inspector, t('chooseTool'));
     const tool = selected;
     const info = el('div', 'x-kicker');
-    info.append(el('span', '', t(tool.role)), el('span', 'x-badge', t(tool.disabled ? 'disabled' : 'readonly')));
+    info.append(el('span', '', t(tool.role)), el('span', 'x-badge', t(tool.disabled ? 'disabled' : tool.surface ? 'available' : 'readonly')));
     inspector.append(info, el('h3', 'x-title', displayName(tool)));
     const facts = el('dl', 'x-fields');
     for (const [key, value] of [['adapter', catalog.providerId], ['page', catalog.url], ['form', tool.form && [tool.form.name || tool.form.id, tool.form.method].filter(Boolean).join(' · ')]]) {
@@ -73,8 +73,45 @@ export function mountBrowser(root, api, t, { el, button, search, heading }) {
     const output = el('div', 'x-output');
     output.setAttribute('aria-live', 'polite');
     inspector.append(output);
-    if (api.bindEditor && catalog.providerId === 'updream' && tool.operations?.includes('prepare_prompt') && !tool.disabled) {
+    if (api.bindEditor && catalog.providerId === 'updream' && (tool.operations?.includes('prepare_prompt') || tool.operations?.includes('save_node_text')) && !tool.disabled) {
       actions.append(button('绑定到当前节点', () => api.bindEditor({tabId:catalog.tabId, documentId:catalog.documentId, toolId:tool.toolId, surface:tool.surface}), 'x-btn x-primary'));
+    }
+    if (tool.surface==='text_node' && tool.operations?.includes('read_node_text') && api.workflow?.readNodeText) {
+      const ref={tabId:catalog.tabId,documentId:catalog.documentId,toolId:tool.toolId};
+      actions.append(button('读取节点正文',async()=>{
+        const request=++epoch;
+        try {
+          const result=await api.workflow.readNodeText(ref);
+          if (!current(request)) return;
+          if (!tool.operations.includes('save_node_text') || !api.workflow.saveNodeText) {
+            output.replaceChildren(el('p','',result.readback || '空文本'));
+            return;
+          }
+          let expected=result.readback;
+          const field=el('textarea','x-input');
+          field.value=expected;
+          field.setAttribute('aria-label','节点正文');
+          field.maxLength=12000;
+          const save=button('保存到文本节点',async()=>{
+            const write=++epoch;
+            field.disabled=save.disabled=true;
+            try {
+              const saved=await api.workflow.saveNodeText(ref,field.value,expected);
+              if (!current(write)) return;
+              if (!saved.exactMatch || saved.readback!==field.value) throw new Error('节点正文与站内读回不一致');
+              expected=saved.readback;
+              field.disabled=false;
+            } catch(error) {
+              if (current(write)) notice(output,t('inspectFailed'),error);
+            }
+          });
+          save.disabled=true;
+          field.addEventListener('input',()=>{save.disabled=!field.value.trim() || field.value===expected;});
+          output.replaceChildren(field,save);
+        } catch(error) {
+          if (current(request)) notice(output,t('inspectFailed'),error);
+        }
+      }));
     }
     if (catalog.providerId === 'updream' && tool.surface === 'video_settings' && !tool.disabled) {
       const ref = {tabId:catalog.tabId,documentId:catalog.documentId,toolId:tool.toolId};
@@ -90,7 +127,7 @@ export function mountBrowser(root, api, t, { el, button, search, heading }) {
             tool.h3Modes.selected = result.mode;
             output.append(el('p','','站内已选 · '+result.mode));
           } else if (Number.isFinite(result.displayedCredits)) {
-            output.append(el('p','',result.model+' · '+result.seconds+'s / '+result.resolution+' · '+result.displayedCredits+' 积分'));
+            output.append(el('p','',result.model+' · '+result.seconds+'s / '+result.resolution+' · '+result.displayedCredits+' 积分'+(result.quoteStatus==='observed_only'?' · 未核价':'')));
             api.onSiteQuote?.(result,ref);
           } else output.append(el('p','','已选择 '+result.model));
         } catch(error) {

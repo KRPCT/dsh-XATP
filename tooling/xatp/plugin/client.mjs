@@ -42,6 +42,8 @@ window.__ModuleLoader__.load({
               inspect:call('inspect'),editPrompt:call('editPrompt'),
               workflow:{
                 read:call('orchestration_read'),
+                readNodeText:binding => call('readNodeText')({binding:editorHandle(binding)}),
+                saveNodeText:(binding,text,expectedText) => call('saveNodeText')({binding:editorHandle(binding),text,expectedText}),
                 configureH3Minimum:binding => call('configureH3Minimum')({binding:editorHandle(binding)}),
                 selectH3Mode:(binding,mode) => call('selectH3Mode')({binding:editorHandle(binding),mode}),
                 selectH3:binding => call('selectH3')({binding:editorHandle(binding)}),

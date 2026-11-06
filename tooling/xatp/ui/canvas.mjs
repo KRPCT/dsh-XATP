@@ -29,6 +29,7 @@ export function mountCanvas(root, api, mountRecords) {
   let history=[], future=[], report, message, showReceipts=false, changedSinceReport=false, timer, quoteBinding, siteQuote, composeText='';
   const nodeById = id => plan?.nodes.find(n=>n.id===id);
   const active = () => nodeById(selected);
+  const targetSurface = node => node?.type==='prompt' ? 'text_node' : node?.params.surface;
   function promptOf(node) {
     return node?.type==='prompt' ? node : nodeById(plan?.edges.find(e=>e.to===node?.id && e.in==='prompt')?.from);
   }
@@ -215,7 +216,7 @@ export function mountCanvas(root, api, mountRecords) {
         const price=el('div','xc-price');price.append(el('strong','',quote??'—'),el('small','','积分'),el('span','xc-alert',quote>H3_POLICY.totalLimit?'超出总上限':'待复核'));cost.append(price);
         stat(cost,'本次额度 / 总上限',H3_POLICY.spendNow+' / '+H3_POLICY.totalLimit+' 积分');
         if(siteQuote && siteQuote.nodeId===n.id){
-          stat(cost,'站内读数',siteQuote.displayedCredits+' 积分 · '+siteQuote.seconds+'s / '+siteQuote.resolution);
+          stat(cost,'站内读数',siteQuote.displayedCredits+' 积分 · '+siteQuote.seconds+'s / '+siteQuote.resolution+(siteQuote.quoteStatus==='observed_only'?' · 未核价':''));
         }
         cost.append(el('small','xc-footnote','11 月 6 日核价 · '+(n.params.referenceSeconds ? '含 '+n.params.referenceSeconds+'s 参考视频' : '无参考视频')));feed.append(cost);
       }else if(n.type==='timeline'){
@@ -228,11 +229,11 @@ export function mountCanvas(root, api, mountRecords) {
       const links=plan.edges.filter(e=>e.to===n.id||e.from===n.id),g=el('section','xc-group');g.append(el('h3','','节点连线'));
       for(const e of links){const incoming=e.to===n.id,other=incoming?e.from:e.to,row=el('div','xc-edge-row');row.append(button((incoming?'输入 · ':'输出 · ')+(nodeById(other)?.title||other),'wire',()=>{select(other);if(frame.clientWidth<850)fit(false);},'xc-edge',true),button('断开这条连线','close',()=>disconnect(e),'xc-remove'));g.append(row);}
       if(!links.length)g.append(el('small','xc-subtle','尚未连接'));feed.append(g);
-      if(n.type==='updream'&&n.params.operation==='draft_prompt'){
+      if(n.type==='updream'&&n.params.operation==='draft_prompt' || n.type==='prompt'&&api.workflow?.readNodeText){
         const connected=el('section','xc-group');connected.append(el('h3','','目标浏览器'));
         connected.append(button(binding?'重新选择编辑器':'选择 Updream 编辑器','browser',()=>openRecords('browser'),'xc-action',true));
         if(quoteBinding && quoteBinding.nodeId===n.id && api.workflow?.quoteH3) connected.append(button('读取站内报价','browser',()=>readQuote(n.id),'xc-action',true));
-        if(binding?.nodeId===n.id&&binding.surface===n.params.surface)connected.append(button('写入并读回草稿','arrow',()=>run(n.id,'live'),'xc-action',true));feed.append(connected);
+        if(binding?.nodeId===n.id&&binding.surface===targetSurface(n))connected.append(button('写入并读回草稿','arrow',()=>run(n.id,'live'),'xc-action',true));feed.append(connected);
       }
     }
     if(report&&!showReceipts){
@@ -250,7 +251,7 @@ export function mountCanvas(root, api, mountRecords) {
     setBusy(true);
     try{
       const result=await api.workflow.quoteH3(quoteBinding);
-      if(disposed)return;siteQuote={...result,nodeId};tell('站内报价 '+result.displayedCredits+' 积分');
+      if(disposed)return;siteQuote={...result,nodeId};tell('站内报价 '+result.displayedCredits+' 积分'+(result.quoteStatus==='observed_only'?' · 未核价':''));
     }catch(e){if(!disposed){siteQuote=quoteBinding=null;tell(e.message||String(e));}}
     finally{if(!disposed){setBusy(false);renderPanel();}}
   }
@@ -260,8 +261,8 @@ export function mountCanvas(root, api, mountRecords) {
     closePopup();closeRecords();const layer=el('div','xc-drawer');const bar=el('div','xc-drawer-head');
     bar.append(button('返回画布','back',closeRecords,'xc-action',true),el('span','','项目资料'));const body=el('div','xc-drawer-content');layer.append(bar,body);frame.append(layer);
     records={layer};records.handle=mountRecords(body,{...api,theme:'dark',onSiteQuote(value,ref){if(active()?.type==='updream'){quoteBinding={...ref,nodeId:selected};siteQuote={...value,nodeId:selected};renderPanel();}},bindEditor(value){
-      if(active()?.type!=='updream')return tell('先选择视频节点');
-      if(value.surface!==active().params.surface)return tell('编辑器与节点的目标区域不同');
+      if(!['prompt','updream'].includes(active()?.type))return tell('先选择文本或视频节点');
+      if(value.surface!==targetSurface(active()))return tell('编辑器与节点的目标区域不同');
       binding={...value,nodeId:selected};closeRecords();renderPanel();tell('已绑定 Updream 编辑器');
     }},view);bar.querySelector('button').focus();
   }
@@ -312,7 +313,7 @@ export function mountCanvas(root, api, mountRecords) {
     select(id);setBusy(true);
     try{
       if(mode==='live'){
-        if(!api.workflow||binding?.nodeId!==id||binding.surface!==nodeById(id)?.params.surface)throw Error('请绑定当前节点的编辑器');
+        if(!api.workflow||binding?.nodeId!==id||binding.surface!==targetSurface(nodeById(id)))throw Error('请绑定当前节点的编辑器');
         if(dirty||revision===0){const saved=await api.workflow.save(copy(plan),revision);if(disposed)return;revision=saved.revision;dirty=false;}
       }
       const result=api.workflow?await api.workflow.run(copy(plan),id,mode,...(mode==='live'?[binding]:[])):dryRun(plan,{targetId:id});

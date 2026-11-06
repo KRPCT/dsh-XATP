@@ -1,5 +1,6 @@
 /** Narrow operations for a selected Updream video node. The generation control is read-only. */
 import {AdapterError} from '../browser/cdp.mjs';
+import {H3_POLICY} from './h3-tariff.mjs';
 
 export const h3ModeControls = Object.freeze({
   '参考生视频':'video-panel-type-ref2v', '图生视频':'video-panel-type-i2v',
@@ -9,7 +10,7 @@ export const h3ModeControls = Object.freeze({
 export const settingsOperations = ['select_h3','inspect_h3_quote','configure_h3_minimum','select_h3_mode'];
 
 // Chromium supplies the exact controls resolved by accessibility role and name in the same frame.
-async function videoSettings(href,mode,model,nodeType,_unused,selection,modeControls,requestedMode) {
+async function videoSettings(href,mode,model,nodeType,_unused,selection,modeControls,requestedMode,rates) {
   const visible = el => el?.isConnected && el.getClientRects().length
     && el.checkVisibility({opacityProperty:true,visibilityProperty:true}) && !el.closest('[inert],[aria-hidden=true]');
   const editors = [...document.querySelectorAll('.prompt-editor-wrap .ProseMirror[contenteditable=true]')].filter(visible);
@@ -23,28 +24,28 @@ async function videoSettings(href,mode,model,nodeType,_unused,selection,modeCont
   const selected = () => model.innerText.trim() === 'MiniMax H3';
   const result = {surface:'video_settings',model:'MiniMax H3',creditsSpent:0};
   const pause = () => new Promise(resolve=>setTimeout(resolve,40));
+  function modeState() {
+    const panels = [...document.querySelectorAll('[data-video-prompt-panel]')].filter(visible);
+    if (panels.length !== 1) return null;
+    const buttons = [...panels[0].querySelectorAll('button[aria-pressed][data-testid^="video-panel-type-"]')].filter(visible);
+    const active = buttons.filter(el=>el.getAttribute('aria-pressed') === 'true');
+    if (active.length !== 1) return null;
+    const available = [], byName = new Map();
+    let selectedMode;
+    for (const [name,id] of Object.entries(modeControls)) {
+      const matched = buttons.filter(el => el.dataset.testid === id && el.innerText.trim() === name);
+      if (matched.length !== 1) continue;
+      const button = matched[0];
+      if (!['true','false'].includes(button.getAttribute('aria-pressed')) || button.disabled
+        || button.closest('[aria-disabled=true]') || button.form) continue;
+      available.push(name);
+      byName.set(name,button);
+      if (button === active[0]) selectedMode = name;
+    }
+    return selectedMode ? {available,selected:selectedMode,byName} : null;
+  }
   if (mode === 'read_modes' || mode === 'select_h3_mode') {
     if (!selected()) return {error:'h3_not_selected'};
-    function modeState() {
-      const panels = [...document.querySelectorAll('[data-video-prompt-panel]')].filter(visible);
-      if (panels.length !== 1) return null;
-      const buttons = [...panels[0].querySelectorAll('button[aria-pressed][data-testid^="video-panel-type-"]')].filter(visible);
-      const active = buttons.filter(el=>el.getAttribute('aria-pressed') === 'true');
-      if (active.length !== 1) return null;
-      const available = [], byName = new Map();
-      let selectedMode;
-      for (const [name,id] of Object.entries(modeControls)) {
-        const matched = buttons.filter(el => el.dataset.testid === id && el.innerText.trim() === name);
-        if (matched.length !== 1) continue;
-        const button = matched[0];
-        if (!['true','false'].includes(button.getAttribute('aria-pressed')) || button.disabled
-          || button.closest('[aria-disabled=true]') || button.form) continue;
-        available.push(name);
-        byName.set(name,button);
-        if (button === active[0]) selectedMode = name;
-      }
-      return selectedMode ? {available,selected:selectedMode,byName} : null;
-    }
     const state = modeState();
     if (!state) return {error:'h3_modes_unavailable'};
     if (mode === 'read_modes') return {available:state.available,selected:state.selected};
@@ -76,9 +77,32 @@ async function videoSettings(href,mode,model,nodeType,_unused,selection,modeCont
     if (!selected()) return {error:'h3_not_selected'};
     const observed = quote();
     if (!observed) return {error:'quote_unavailable'};
-    if (mode === 'inspect_h3_quote') return observed.value;
-    const minimum = value => value?.seconds === 5 && value.resolution === '768P' && value.displayedCredits === 250;
-    if (minimum(observed.value)) return observed.value;
+    const quoteMode = modeState()?.selected;
+    if (!quoteMode) return {error:'quote_unconfirmed'};
+    // Only text-to-video excludes a reference-video surcharge by construction.
+    // Never replace the site's number with a local estimate.
+    async function confirmQuote(expected) {
+      const deadline = performance.now()+3000;
+      do {
+        if (!bound() || !selected() || modeState()?.selected !== quoteMode) return null;
+        const current = quote()?.value;
+        if (current && (current.seconds !== expected.seconds || current.resolution !== expected.resolution)) {
+          return {error:'quote_settings_changed'};
+        }
+        if (current && current.displayedCredits === current.seconds*rates[current.resolution]) {
+          return {...current,quoteMode,quoteStatus:'matched_no_reference_tariff'};
+        }
+        await pause();
+      } while (performance.now()<deadline);
+      return {error:'quote_unconfirmed'};
+    }
+    if (quoteMode !== '文生视频') {
+      if (mode === 'configure_h3_minimum') return {error:'h3_text_mode_required'};
+      return {...observed.value,quoteMode,quoteStatus:'observed_only'};
+    }
+    if (mode === 'inspect_h3_quote') return confirmQuote(observed.value);
+    const minimum = value => value?.seconds === 5 && value.resolution === '768P';
+    if (minimum(observed.value)) return confirmQuote(observed.value);
     const durationField = 'input[data-testid="video-options-duration-input"][aria-label="时长"]';
     const qualityButton = 'button[data-testid="video-options-opt-resolution-768P"]';
     const one = selector => {
@@ -89,13 +113,13 @@ async function videoSettings(href,mode,model,nodeType,_unused,selection,modeCont
     if (!one(durationField)) observed.trigger.click();
     for (let tick=0;tick<20;tick++) {
       await pause();
-      if (!bound() || !selected()) return null;
+      if (!bound() || !selected() || modeState()?.selected !== quoteMode) return null;
       const duration = one(durationField), quality = one(qualityButton);
       if (!duration || !quality) continue;
       if (duration.disabled || duration.readOnly || duration.min !== '5' || duration.max !== '15' || quality.disabled
         || quality.closest('form') || observed.trigger.closest('form')) return {error:'h3_options_unavailable'};
       if (!quality.className.includes('vopTabItemActive')) quality.click();
-      if (!bound() || !selected() || !visible(duration)) return null;
+      if (!bound() || !selected() || modeState()?.selected !== quoteMode || !visible(duration)) return null;
       if (duration.value !== '5') {
         Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(duration,'5');
         duration.dispatchEvent(new Event('input',{bubbles:true}));
@@ -104,9 +128,9 @@ async function videoSettings(href,mode,model,nodeType,_unused,selection,modeCont
       }
       for (let step=0;step<25;step++) {
         await pause();
-        if (!bound() || !selected()) return null;
+        if (!bound() || !selected() || modeState()?.selected !== quoteMode) return null;
         const current = quote()?.value;
-        if (minimum(current)) return current;
+        if (minimum(current)) return confirmQuote(current);
       }
       return {error:'h3_minimum_unconfirmed'};
     }
@@ -151,9 +175,10 @@ export async function locateVideoSettings(send,context,href,controls) {
 
 export async function invokeVideoSettings(send,frame,match,request) {
   const reply = await send('Runtime.callFunctionOn',{objectId:match.objectId,functionDeclaration:videoSettings.toString(),
-    arguments:[{value:frame.href},{value:request.operation},...match.controls,{value:h3ModeControls},{value:request.mode ?? null}],awaitPromise:true,returnByValue:true});
+    arguments:[{value:frame.href},{value:request.operation},...match.controls,{value:h3ModeControls},{value:request.mode ?? null},{value:H3_POLICY.rates}],awaitPromise:true,returnByValue:true});
   const result = reply.result.value;
   if (reply.exceptionDetails || !result) throw new AdapterError('stale_tool','The selected Updream video node changed.');
-  if (result.error) throw new AdapterError(result.error,'The requested H3 control could not be verified on this video node.');
+  if (result.error) throw new AdapterError(result.error,result.error === 'quote_unconfirmed'
+    ? 'quote_unconfirmed' : 'The requested H3 control could not be verified on this video node.');
   return result;
 }

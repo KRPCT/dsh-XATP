@@ -71,14 +71,16 @@ export function createWorkflowHost(directory,getBrowser) {
     const clips = nodes.filter(n=>n.type === 'updream');
     // Preflight the entire slice before making a browser connection or reserving work.
     if (clips.some(n=>n.params.operation !== 'draft_prompt')) return reject('GENERATION_BLOCKED：MiniMax H3 最低 250 积分，本次 0，总上限 100。');
-    if (clips.length !== 1) return reject('SELECT_ONE_UPDREAM_PROMPT');
+    const textNode = !clips.length && nodes.length===1 && nodes[0].type==='prompt' && nodes[0].id===targetId;
+    if (!textNode && clips.length !== 1) return reject('SELECT_ONE_UPDREAM_PROMPT');
     if (!state.revision || !isDeepStrictEqual(plan,state.plan)) return reject('SAVE_CURRENT_PLAN_FIRST');
-    const {id,params} = clips[0];
+    const {id,params} = textNode ? nodes[0] : clips[0];
+    const surface = textNode ? 'text_node' : params.surface;
     const {prompt} = result.receipts.find(receipt=>receipt.nodeId===id);
     const ref = bindRequest(binding);
     const browser = getBrowser();
-    const observed = await browser.invoke({...ref,operation:'read_prompt'});
-    if (observed.surface !== params.surface) return reject('UPDREAM_SURFACE_CHANGED');
+    const observed = await browser.invoke({...ref,operation:textNode ? 'read_node_text' : 'read_prompt'});
+    if (observed.surface !== surface) return reject('UPDREAM_SURFACE_CHANGED');
     if (observed.readback !== '' && observed.readback !== prompt) return reject('DRAFT_CONFLICT');
     const attempt = createHash('sha256').update(JSON.stringify([state.revision,id,ref.tabId,ref.documentId,ref.toolId])).digest('hex');
     let receipt = {nodeId:id,prompt,status:'pending',detail:'等待编辑器读回'};
@@ -92,12 +94,13 @@ export function createWorkflowHost(directory,getBrowser) {
     if (claim && observed.readback !== prompt) return reject('DRAFT_RECONCILIATION_REQUIRED');
     if (observed.readback !== prompt) {
       // On a lost acknowledgement the reservation survives. A retry may reconcile by reading, never by retyping.
-      const verified = await browser.invoke({...ref,operation:'prepare_prompt',prompt,expectedCurrentText:''});
-      if (verified.surface !== params.surface || verified.readback !== prompt || !verified.exactMatch || verified.creditsSpent !== 0) {
+      const operation = textNode ? {operation:'save_node_text',text:prompt,expectedText:''} : {operation:'prepare_prompt',prompt,expectedCurrentText:''};
+      const verified = await browser.invoke({...ref,...operation});
+      if (verified.surface !== surface || verified.readback !== prompt || !verified.exactMatch || verified.creditsSpent !== 0) {
         return reject('DRAFT_READBACK_MISMATCH');
       }
     }
-    receipt = {nodeId:id,status:'verified',prompt,detail:'Updream 编辑器逐字读回',surface:params.surface,creditsSpent:0};
+    receipt = {nodeId:id,status:'verified',prompt,detail:'Updream 编辑器逐字读回',surface,creditsSpent:0};
     ledger(directory,true,db=>db.prepare('UPDATE workflow_runs SET receipt=? WHERE attempt=?').run(JSON.stringify(receipt),attempt));
     return {...result,receipts:nodes.map(n=>n.id===id ? receipt : n.type==='prompt'
       ? {nodeId:n.id,status:'resolved',prompt:n.params.text,detail:'提示词已解析'} : {nodeId:n.id,status:'checked',detail:'已检查成片计划'})};
@@ -106,7 +109,15 @@ export function createWorkflowHost(directory,getBrowser) {
     const ref = bindRequest(binding);
     return getBrowser().invoke({...ref,operation,...(mode === undefined ? {} : {mode})});
   }
-  return {read,save,compile,run,
+  async function checkH3Draft({binding}) {
+    const ref = bindRequest(binding);
+    const observed = await getBrowser().invoke({...ref,operation:'read_prompt'});
+    if (observed.surface !== 'video' || typeof observed.readback !== 'string') throw new Error('SELECT_H3_VIDEO_EDITOR');
+    return {surface:'video',empty:observed.readback === ''};
+  }
+  return {read,save,compile,run,checkH3Draft,
+    readNodeText:({binding})=>getBrowser().invoke({...bindRequest(binding),operation:'read_node_text'}),
+    saveNodeText:({binding,text,expectedText})=>getBrowser().invoke({...bindRequest(binding),operation:'save_node_text',text,expectedText}),
     selectH3Mode:args=>h3Settings('select_h3_mode',args),
     selectH3:args=>h3Settings('select_h3',args),
     quoteH3:args=>h3Settings('inspect_h3_quote',args),

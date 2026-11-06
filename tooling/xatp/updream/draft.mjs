@@ -1,11 +1,12 @@
 /** The only Updream browser mutations available to workflows are edits to a bound draft. */
 import {AdapterError} from '../browser/cdp.mjs';
 
-import {bindVideoSelection} from './selected-video.mjs';
+import {discoverTextNode,invokeTextNode,textOperations} from './text-node.mjs';
+import {bindNodeSelection} from './selected-node.mjs';
 import {invokeVideoSettings,locateVideoSettings,settingsOperations} from './video-settings.mjs';
 
 const editorOperations = ['read_prompt','prepare_prompt'];
-export const draftOperations = [...editorOperations,...settingsOperations];
+export const draftOperations = [...editorOperations,...settingsOperations,...textOperations];
 const surfaces = ['agent','video'];
 
 export function isUpdreamCanvas(provider, location) {
@@ -56,13 +57,15 @@ function args(...values) { return values.map(value => ({value})); }
 export async function discoverDrafts(send,context,policy,frame,hash,nodes) {
   if (!isUpdreamCanvas(policy.id,frame.href) || !draftOperations.some(op => policy.capabilities.has(op))) return [];
   const observed = [];
+  const text = await discoverTextNode(send,context,policy,frame,hash);
+  if (text) observed.push(text);
   async function uniqueControl(role,name) {
     const matches = nodes.filter(n => !n.ignored && n.role.value === role && n.name?.value === name && n.backendDOMNodeId);
     if (matches.length !== 1) return {value:null};
     const {object} = await send('DOM.resolveNode',{backendNodeId:matches[0].backendDOMNodeId,executionContextId:context});
     return {objectId:object.objectId};
   }
-  const selection = await bindVideoSelection(send,context,frame.href);
+  const selection = await bindNodeSelection(send,context,frame.href,'.canvas-node.canvas-node-video.selected[data-node-id]');
   const videoControls = selection ? [await uniqueControl('combobox','模型'),await uniqueControl('combobox','节点类型'),{value:null},selection.argument] : null;
   const settings = settingsOperations.filter(op => policy.capabilities.has(op));
   if (settings.length && videoControls) {
@@ -97,6 +100,7 @@ export async function discoverDrafts(send,context,policy,frame,hash,nodes) {
 
 export async function invokeDraft(send,frame,match,request) {
   const surface = match.tool.surface;
+  if (surface === 'text_node') return invokeTextNode(send,match,request);
   if (surface === 'video_settings') return invokeVideoSettings(send,frame,match,request);
   const prompt = request.prompt;
   const expected = request.expectedCurrentText === undefined ? '' : request.expectedCurrentText;

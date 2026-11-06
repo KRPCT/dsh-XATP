@@ -95,14 +95,23 @@ test('prepares only bound Updream drafts, rejects stale projects and preserves u
     for (const mode of ['首尾帧','视频编辑','全能参考']) {
       await assert.rejects(()=>invoke(h3,'select_h3_mode',{mode}),{code:'h3_mode_unavailable'});
     }
+    const raw=await invoke(h3,'inspect_h3_quote');
+    assert.deepEqual([raw.quoteMode,raw.quoteStatus,raw.displayedCredits],['参考生视频','observed_only',425]);
+    await assert.rejects(()=>invoke(h3,'configure_h3_minimum'),{code:'h3_text_mode_required'});
     assert.deepEqual(await invoke(h3,'select_h3_mode',{mode:'文生视频'}),{surface:'video_settings',model:'MiniMax H3',mode:'文生视频',creditsSpent:0});
     assert.equal((await adapter.discover(tab)).tools.find(t=>t.surface==='video_settings').h3Modes.selected,'文生视频');
-    const base = {surface:'video_settings',model:'MiniMax H3',creditsSpent:0,seconds:5};
+    const base = {surface:'video_settings',model:'MiniMax H3',creditsSpent:0,seconds:5,quoteMode:'文生视频',quoteStatus:'matched_no_reference_tariff'};
     assert.deepEqual(await invoke(settings,'inspect_h3_quote'),{...base,resolution:'2K',displayedCredits:425});
     // Exercise duration entry as well as quality. The test UI recomputes its displayed quote on real input.
     await page.getByRole('button',{name:'16:9 / 5S / 2K'}).click();
     await page.getByLabel('时长').fill('10');
     assert.deepEqual(await invoke(settings,'configure_h3_minimum'),{...base,resolution:'768P',displayedCredits:250});
+    const price = page.locator('.creditHint_abc');
+    await price.evaluate(el=>{el.textContent='230';setTimeout(()=>{el.textContent='250';},150);});
+    assert.deepEqual(await invoke(settings,'inspect_h3_quote'),{...base,resolution:'768P',displayedCredits:250});
+    await price.evaluate(el=>{el.textContent='230';});
+    await assert.rejects(()=>invoke(settings,'inspect_h3_quote'),{code:'quote_unconfirmed'});
+    await price.evaluate(el=>{el.textContent='250';});
     const video = (await adapter.discover(tab)).tools.find(t=>t.surface==='video');
     assert.ok(video);
     assert.equal((await invoke(video,'prepare_prompt',{prompt})).readback,prompt);
@@ -111,7 +120,10 @@ test('prepares only bound Updream drafts, rejects stale projects and preserves u
     assert.deepEqual(counts,{sent:0,edited:true,feedback:'feedback',title:'project',agent:'已修改'});
     assert.equal(routed,1);
     // The floating panel is reused when a different graph node is selected.
-    await page.evaluate(()=>document.querySelector('[data-node-id]').dataset.nodeId='local-reused-node');
+    await price.evaluate(el=>{el.textContent='230';});
+    const stale=assert.rejects(()=>invoke(settings,'inspect_h3_quote'),{code:'stale_tool'});
+    await page.evaluate(()=>setTimeout(()=>{document.querySelector('[data-node-id]').dataset.nodeId='local-reused-node';},80));
+    await stale;
     await assert.rejects(()=>invoke(settings,'configure_h3_minimum'),{code:'stale_tool'});
     await assert.rejects(()=>invoke(video,'prepare_prompt',{prompt:'wrong node',expectedCurrentText:prompt}),{code:'stale_tool'});
     const rebound = (await adapter.discover(tab)).tools.find(t=>t.surface==='video');

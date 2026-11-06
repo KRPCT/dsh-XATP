@@ -10,6 +10,9 @@ export const inject = ['tools'];
 const planField = {type:'object',properties:{nodes:{type:'array',items:{type:'object'}},edges:{type:'array',items:{type:'object'}},timeline:{type:'array',items:{type:'object'}}},required:['nodes','edges','timeline']};
 const bindingField = {type:'object',properties:{tabId:{type:'string'},documentId:{type:'string'},toolId:{type:'string'}},required:['tabId','documentId','toolId'],additionalProperties:false};
 const methods = {
+  checkH3Draft: ['xatp_check_h3_draft','Read whether the bound MiniMax H3 video editor is empty, without returning its contents.',{binding:bindingField}],
+  readNodeText: ['xatp_read_node_text','Read the selected Updream canvas text node through its discovered binding.',{binding:bindingField}],
+  saveNodeText: ['xatp_save_node_text','Save plain text to the selected Updream text node only if the exact current text matches expectedText. Read back the saved node.',{binding:bindingField,text:'string',expectedText:'string'}],
   configureH3Minimum: ['xatp_configure_h3_minimum','Set a discovered MiniMax H3 control to its verified 5-second 768P minimum and read its quote without submitting.',{binding:bindingField}],
   selectH3Mode: ['xatp_select_h3_mode','Select one currently enabled mode on the bound H3 video node. Return its verified pressed state.',{
     binding:bindingField,mode:{type:'string',enum:Object.keys(h3ModeControls)},
@@ -68,6 +71,8 @@ export function apply(ctx, config = {}) {
   }
   const workflow = createWorkflowHost(directory,browser);
   const service = {
+    checkH3Draft:workflow.checkH3Draft,
+    readNodeText:workflow.readNodeText,saveNodeText:workflow.saveNodeText,
     selectH3Mode:workflow.selectH3Mode,selectH3:workflow.selectH3,quoteH3:workflow.quoteH3,configureH3Minimum:workflow.configureH3Minimum,
     orchestration_read:workflow.read, orchestration_save:workflow.save,
     orchestration_compile:workflow.compile, orchestration_run:workflow.run,

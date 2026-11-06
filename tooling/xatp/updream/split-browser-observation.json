@@ -1,0 +1,25 @@
+{
+  "observedOn": "2026-11-06",
+  "kind": "result",
+  "status": "verified",
+  "transport": "operator-mediated live browser UI over semantic stdio; browser replies not independently attested",
+  "model": "MiniMax H3",
+  "displayedCredits": 250,
+  "budget": 0,
+  "submitted": false,
+  "sequence": [
+    "read_prompt",
+    "prepare_prompt",
+    "read_prompt"
+  ],
+  "uniqueVerifiedSqliteReceipts": 1,
+  "planRevision": 1,
+  "promptSha256": "72e82be0492eccb826e2d1b069896011385b9c41d8efd3c6407ce80d857b8ce8",
+  "observations": [
+    "The signed-in temporary video node was blank before dispatch.",
+    "The browser operator inserted the sole prepare_prompt request into the bound H3 video prompt field.",
+    "After another node was selected and the video node reopened, the exact prompt was still present.",
+    "On reselect, the visible credit hint briefly showed 230 before settling at 250. The receipt used the settled quote."
+  ],
+  "scope": "Registered DSH tools and real workspace with a supervised semantic browser transport. The transport replaced the CDP adapter during the experiment. It did not test production CDP connectivity, online DeepSeek inference or paid generation."
+}

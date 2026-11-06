@@ -11,6 +11,13 @@
     "Inspected the video model menu, chose MiniMax H3 (distinct from MiniMax H3 Max) and verified the selected label.",
     "Read duration limits, changed image quality, checked both displayed H3 quotes against the platform tariff and inspected credit consumption."
   ],
+  "continuedInspection": {
+    "text": "Saved two paragraphs in a new text node and read both back from the canvas preview.",
+    "audio": "Created an empty audio node and opened parameter settings. The UI exposed voice, speed, tone, volume, pitch and emotion. No preview or synthesis was requested.",
+    "previz": "Created a previz node. The live browser reported WebGL2 unavailable and disabled the open action.",
+    "upload": "Opening Upload produced a multiple-file chooser. No files were selected or transferred.",
+    "video": "The supervised DSH prompt round trip is recorded in split-browser-observation.json."
+  },
   "addMenu": ["文本", "图片", "视频", "音频", "Agent", "预演台", "上传"],
   "defaultModelVideoModesObservedBeforeSelectingH3": ["全能参考", "图生视频", "首尾帧", "视频编辑", "文生视频"],
   "videoModelMenuEntries": 22,

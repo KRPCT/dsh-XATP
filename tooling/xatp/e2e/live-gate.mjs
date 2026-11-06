@@ -67,6 +67,7 @@ export function finalReport(environment) {
     gates:[
       {id:'dsh_deepseek_turn',status:'unverified',requires:'A real model turn invoking the versioned workflow through DSH.'},
       {id:'updream_account_inventory',status:'observed',evidence:'updream/authenticated-observations.json',scope:'Menu inventory and no-submit field checks on one account, 2026-11-06.'},
+      {id:'dsh_signed_in_prompt_relay',status:'observed',evidence:'updream/split-browser-observation.json',scope:'One real H3 draft, supervised browser relay, one SQLite receipt. Direct production CDP unverified.'},
       {id:'updream_prompt_dispatch',status:'unverified',requires:'Per-capability platform observations of the actual prompt, resulting action, and its unique receipt, including prompt or reference readback where exposed.'},
       {id:'updream_h3_generation',status:'out_of_budget',requires:'At current rates the lowest provider quote exceeds the cumulative limit. Keep generation disabled.'},
     ],
